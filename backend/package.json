@@ -1,0 +1,36 @@
+{
+  "name": "ultratech-rmc-backend",
+  "version": "1.1.0",
+  "description": "Backend API for Ultratech RMC Pricing Application",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "dev:verbose": "NODE_OPTIONS=--enable-source-maps nodemon server.js"
+  },
+  "keywords": [
+    "express",
+    "mongodb",
+    "ultratech",
+    "pricing"
+  ],
+  "author": "Ultratech Dev",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.5.1",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
