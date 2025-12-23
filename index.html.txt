@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>UltraTech RMC – Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Redirect to Login Page -->
+  <meta http-equiv="refresh" content="0; url=frontend/login.html" />
+</head>
+
+<body>
+  <p>Loading UltraTech RMC Login…</p>
+</body>
+</html>
