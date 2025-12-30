@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>View Calculation</title>
+<style>
+  :root{--bg:#f5f7fb;--ink:#111827;--line:#e5e7eb}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f7fb;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:#111827}
+  header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:18px;font-weight:800}
+  main{max-width:1200px;margin:0 auto;padding:12px;display:grid;gap:12px}
+  .chips{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .chip{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px}
+  .chip span{font-size:12px}
+  .chip .lab{color:#475569}
+  .chip .val{font-weight:700}
+  .cols{display:grid;grid-template-columns:1.1fr .9fr 1.05fr;gap:12px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:grid;grid-template-rows:auto 1fr}
+  .panel h2{margin:0;font-size:13px;font-weight:800;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
+  .table-wrap{overflow:auto}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:9px 12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:12px}
+  th{background:#f9fafb;text-align:left}
+  td.right{text-align:right}
+  .actions{display:flex;justify-content:center;gap:10px;margin:8px 0 20px}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer}
+  @media (max-width:1280px){.chips{grid-template-columns:repeat(4,1fr)}.cols{grid-template-columns:1fr 1fr}}
+  @media (max-width:1024px){.chips{grid-template-columns:repeat(3,1fr)}.cols{grid-template-columns:1fr}table{min-width:680px}}
+  @media (max-width:600px){.chips{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:420px){.chips{grid-template-columns:1fr}table{min-width:560px}}
+</style>
+</head>
+<body>
+<header><h1>CHECK RECORD — View Calculation</h1></header>
+
+<main>
+  <!-- Top chips -->
+  <section class="chips">
+    <div class="chip"><span class="lab">Date</span><span class="val" id="chipDate">—</span></div>
+    <div class="chip"><span class="lab">P_ID</span><span class="val" id="chipPid">—</span></div>
+    <div class="chip"><span class="lab">Project</span><span class="val" id="chipProject">—</span></div>
+    <div class="chip"><span class="lab">Quantity</span><span class="val" id="chipQty">—</span></div>
+    <div class="chip"><span class="lab">Grade</span><span class="val" id="chipGrade">—</span></div>
+    <div class="chip"><span class="lab">Supply Plant</span><span class="val" id="chipPlant">—</span></div>
+  </section>
+
+  <section class="cols">
+    <!-- Raw Materials -->
+    <section class="panel">
+      <h2>Raw Material · RM Mix Cost</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Raw Material</th>
+              <th>RM Rate</th>
+              <th>RM Mix / Cum</th>
+              <th>RM Cost / Cum</th>
+            </tr>
+          </thead>
+          <tbody id="rmRows"></tbody>
+          <tfoot>
+            <tr>
+              <td class="right"><b>Total</b></td>
+              <td></td>
+              <td class="right" id="rmTotalMix">0</td>
+              <td class="right" id="rmTotalCost">0</td>
+            </tr>
+            <tr>
+              <td class="right"><b>Total RM Cost</b></td>
+              <td></td><td></td>
+              <td class="right" id="rmF">0</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- TM Charges -->
+    <section class="panel">
+      <h2>TM Charges · Input Data</h2>
+      <div class="table-wrap">
+        <table>
+          <tbody id="tmRows">
+            <tr><td>Lead (KM)</td><td class="right" id="L1v">0</td></tr>
+            <tr><td>Two-way Distance (KM)</td><td class="right" id="L2v">0</td></tr>
+            <tr><td>Rate / KM</td><td class="right" id="L3v">0</td></tr>
+            <tr><td>Cost / Trip</td><td class="right" id="L4v">0</td></tr>
+            <tr><td>Diesel Cost / Cum</td><td class="right" id="L5v">0</td></tr>
+            <tr><td>Qty per Trip (Cum)</td><td class="right" id="L6v">0</td></tr>
+            <tr><td>Hire Charges per Day</td><td class="right" id="L7v">0</td></tr>
+            <tr><td>Trips per Day</td><td class="right" id="L8v">0</td></tr>
+            <tr><td>Hire Charges / Cum</td><td class="right" id="L9v">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Contribution -->
+    <section class="panel">
+      <h2>Contribution Calculation · Per Cum</h2>
+      <div class="table-wrap">
+        <table>
+          <tbody id="cRows">
+            <tr><td>Gross Sale Price</td><td class="right" id="C1v">0</td></tr>
+            <tr><td>Excise</td><td class="right" id="C2v">0</td></tr>
+            <tr><td>GST @18%</td><td class="right" id="C3v">0</td></tr>
+            <tr><td><b>Net Price</b></td><td class="right" id="C4v">0</td></tr>
+            <tr><td>RM Cost</td><td class="right" id="C5v">0</td></tr>
+            <tr><td>TM Hire Charges</td><td class="right" id="C10v">0</td></tr>
+            <tr><td>TM Diesel Charges</td><td class="right" id="C6v">0</td></tr>
+            <tr><td>Pumping Cost</td><td class="right" id="C7v">0</td></tr>
+            <tr><td>Stores & Spares</td><td class="right" id="C11v">0</td></tr>
+            <tr><td>Power Cost</td><td class="right" id="C12v">0</td></tr>
+            <tr><td>SPC</td><td class="right" id="C13v">0</td></tr>
+            <tr><td><b>Raw Margin</b></td><td class="right" id="C8v">0</td></tr>
+            <tr><td><b>Contribution</b></td><td class="right" id="C9v">0</td></tr>
+            <tr><td>Fixed Expenses</td><td class="right" id="C14v">0</td></tr>
+            <tr><td><b>PBDIT</b></td><td class="right" id="C15v">0</td></tr>
+            <tr><td>Interest & Depreciation</td><td class="right" id="C17v">0</td></tr>
+            <tr><td><b>PAT</b></td><td class="right" id="C16v">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <div class="actions">
+    <button id="backBtn" class="btn">Back to Record Page</button>
+  </div>
+</main>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+const API = `${API_BASE}/api/records`;
+const fmt=(n)=>Number.isFinite(n)?Math.round(n*100)/100:0;
+function getParam(name){return new URL(location.href).searchParams.get(name);}
+
+async function load(){
+  const id=getParam('id');
+  if(!id){
+    document.body.innerHTML='<main style="padding:24px">No id provided.</main>';
+    return;
+  }
+
+  const res=await fetch(`${API}/${encodeURIComponent(id)}`,{
+    headers:{ 'Authorization': `Bearer ${AUTH.token}` }
+  });
+
+  if(res.status===401){
+    // session expired or unauthorized
+    sessionStorage.setItem('redirectAfterLogin','view.html?id='+encodeURIComponent(id));
+    location.href='login.html';
+    return;
+  }
+
+  if(!res.ok){
+    document.body.innerHTML='<main style="padding:24px">Record not found.</main>';
+    return;
+  }
+
+  const rec=await res.json();
+
+  // chips
+  document.getElementById('chipDate').textContent = new Date(rec.date||rec.createdAt||Date.now()).toLocaleDateString('en-GB');
+  document.getElementById('chipPid').textContent  = rec._id || rec.p_id || '';
+  document.getElementById('chipProject').textContent = rec.project||'';
+  document.getElementById('chipQty').textContent     = rec.qty??0;
+  document.getElementById('chipGrade').textContent   = rec.grade||'';
+  document.getElementById('chipPlant').textContent   = rec.plant||'';  
+
+  // materials
+  const rmTbody=document.getElementById('rmRows');
+  let tMix=0,tCost=0;
+  (rec.materials||[]).forEach(m=>{
+    tMix+=(+m.mix||0); tCost+=(+m.cost||0);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${m.name||''}</td>
+                  <td class="right">${m.rate??0}</td>
+                  <td class="right">${m.mix??0}</td>
+                  <td class="right">${fmt(m.cost||0)}</td>`;
+    rmTbody.appendChild(tr);
+  });
+  document.getElementById('rmTotalMix').textContent = fmt(tMix);
+  document.getElementById('rmTotalCost').textContent = fmt(tCost);
+  document.getElementById('rmF').textContent = fmt(rec.pricing?.C5||0);
+
+  // TM + Contribution
+  const tm=rec.tm||{}, c=rec.pricing||{};
+  ['L1','L2','L3','L4','L5','L6','L7','L8','L9'].forEach(k=>{
+    const el=document.getElementById(k+'v'); if(el) el.textContent=tm[k]??0;
+  });
+  ['C1','C2','C3','C4','C5','C10','C6','C7','C11','C12','C13','C8','C9','C14','C15','C17','C16'].forEach(k=>{
+    const el=document.getElementById(k+'v'); if(el) el.textContent=fmt(c[k]||0);
+  });
+}
+
+document.getElementById('backBtn').addEventListener('click', ()=>{
+  if(document.referrer) location.href=document.referrer;
+  else location.href='records.html';
+});
+
+load();
+</script>
+</body>
+</html>

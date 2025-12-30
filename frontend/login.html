@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Login — Ultratech RMC</title>
+
+<style>
+  :root{--bg:#dedede;--ink:#2d2d2d;--line:#e5e7eb;--accent:#111;--muted:#6b7280}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  .wrap{min-height:100dvh;display:grid;place-items:center;padding:24px}
+  .card{width:min(560px,92vw);background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px 32px;box-shadow:0 8px 30px rgba(0,0,0,.06)}
+  h1{margin:0 0 24px;font-size:28px;letter-spacing:.5px}
+  .row{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:14px;margin:18px 0}
+  label{font-size:16px;color:#444}
+  input[type=text],input[type=password]{width:100%;padding:14px 16px;border:none;background:#ddd;border-radius:14px;font-size:16px;color:#111}
+  .check{display:flex;align-items:center;gap:10px;margin-top:4px}
+  .btn{appearance:none;border:none;border-radius:16px;background:#333;color:#fff;font-weight:700;padding:14px 18px;font-size:18px;cursor:pointer;width:60%;margin:20px auto 6px;display:block}
+  .btn[disabled]{opacity:.7;cursor:not-allowed}
+  .err{color:#b91c1c;font-size:14px;text-align:center;min-height:18px}
+  .muted{color:#6b7280;text-align:center;font-size:13px}
+  @media (max-width:560px){.row{grid-template-columns:1fr;gap:8px}}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>LOGIN</h1>
+
+    <div class="row">
+      <label for="uid">User Id / Email</label>
+      <input id="uid" type="text" placeholder="e.g. 001243 or user@company.com" autocomplete="username" />
+    </div>
+
+    <div class="row">
+      <label for="pwd">Password</label>
+      <input id="pwd" type="password" placeholder="Password" autocomplete="current-password" />
+    </div>
+
+    <div class="row" style="grid-template-columns:1fr">
+      <label class="check"><input id="show" type="checkbox" /> Show password</label>
+    </div>
+
+    <button id="loginBtn" class="btn">Login</button>
+    <div id="err" class="err"></div>
+
+    <div class="muted">
+      Tip: ask admin to run <code>/api/auth/seed-admin</code> once to create the first user.
+    </div>
+  </div>
+</div>
+
+<!-- ✅ SHARED AUTH HELPERS (SINGLE SOURCE OF TRUTH) -->
+<script src="./auth.js"></script>
+
+<script>
+const uid = document.getElementById('uid');
+const pwd = document.getElementById('pwd');
+const show = document.getElementById('show');
+const errEl = document.getElementById('err');
+const btn = document.getElementById('loginBtn');
+
+show.addEventListener('change', ()=> {
+  pwd.type = show.checked ? 'text' : 'password';
+});
+
+async function login(){
+  errEl.textContent = '';
+  const id = uid.value.trim();
+  const pass = pwd.value;
+
+  if(!id || !pass){
+    errEl.textContent = 'Please enter both fields.';
+    return;
+  }
+
+  try {
+    btn.disabled = true;
+
+    const data = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: id, password: pass })
+    });
+
+    AUTH.token = data.token;
+    AUTH.user  = data.user;
+
+    // Redirect if user was forced to login
+    const stored = sessionStorage.getItem('redirectAfterLogin');
+    if (stored) {
+      sessionStorage.removeItem('redirectAfterLogin');
+      location.href = stored;
+      return;
+    }
+
+    // Route by role
+    const role = (data.user?.role || '').toLowerCase();
+    const roleToPage = {
+      admin: 'admin-dashboard.html',
+      zone: 'zone-dashboard.html',
+      rm: 'regional-dashboard.html',
+      sm: 'salesmanager-dashboard.html',
+      se: 'se-dashboard.html',
+    };
+
+    location.href = roleToPage[role] || 'dashboard.html';
+
+  } catch (e) {
+    errEl.textContent = e.message || 'Login failed';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+btn.addEventListener('click', login);
+pwd.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') login(); });
+</script>
+</body>
+</html>

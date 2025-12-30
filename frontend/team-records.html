@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Team Records</title>
+<style>
+  :root{--bg:#f3f4f6;--card:#ffffff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#3b82f6;--accent-2:#1d4ed8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:18px;font-weight:800}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  .filters{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:12px;align-items:end;margin:10px 0 16px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  label{font-size:12px;color:var(--muted)}
+  select,input[type=date]{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;font-size:12px}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));border-color:var(--accent-2);color:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .card h2{margin:0;font-size:13px;font-weight:800;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
+  .table-wrap{max-height:62vh;overflow:auto}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:12px}
+  th{position:sticky;top:0;background:#f1f5f9;text-align:left}
+  td.right{text-align:right}
+  td a{color:#3b82f6;text-decoration:none;font-weight:700}
+  .muted{color:var(--muted)}
+  @media (max-width:900px){
+    main{padding:10px}
+    .filters{grid-template-columns:1fr 1fr}
+    .table-wrap{max-height:none}
+    table{min-width:980px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Team Records</h1>
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <a class="btn" href="javascript:history.back()">Back</a>
+    <a class="btn" href="calculator.html">New Calculation</a>
+    <button id="logoutBtn" class="btn">Logout</button>
+  </div>
+</header>
+
+<main>
+  <section class="filters card" style="padding:12px">
+    <div class="field">
+      <label>Pick Role</label>
+      <select id="roleSel"></select>
+    </div>
+    <div class="field">
+      <label>Pick Team Member</label>
+      <select id="userSel"></select>
+    </div>
+    <div class="field"><label>From</label><input id="fromDate" type="date"/></div>
+    <div class="field"><label>To</label><input id="toDate" type="date"/></div>
+    <button id="apply" class="btn primary">Apply</button>
+  </section>
+
+  <section class="card">
+    <h2>
+      Records
+      <span id="recCount" style="font-weight:700;color:#1d4ed8;margin-left:6px"></span>
+      <span id="contextNote" class="muted" style="margin-left:8px"></span>
+    </h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:110px">Date</th>
+            <th style="width:120px">ID</th>
+            <th>Project</th>
+            <th style="width:90px">Qty</th>
+            <th style="width:80px">Grade</th>
+            <th style="width:120px">Plant</th>
+            <th style="width:120px">Designation</th>
+            <th style="width:140px">Created By</th>
+            <th style="width:100px">Net Price</th>
+            <th style="width:110px">Raw Margin</th>
+            <th style="width:110px">Contribution</th>
+            <th style="width:90px">PBDIT</th>
+            <th style="width:80px">View</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+const q = id => document.getElementById(id);
+const ddmmyyyy = iso => { const d=new Date(iso);const dd=String(d.getDate()).padStart(2,'0');const mm=String(d.getMonth()+1).padStart(2,'0');const yy=d.getFullYear();return `${dd}.${mm}.${yy}`; };
+const fmt2 = n => Number.isFinite(n) ? Math.round(n*100)/100 : 0;
+
+const roleSel = q('roleSel');
+const userSel = q('userSel');
+const fromEl  = q('fromDate');
+const toEl    = q('toDate');
+const rowsEl  = q('rows');
+const noteEl  = q('contextNote');
+const base    = `${API_BASE}/api`;
+q('logoutBtn').onclick = logout;
+
+// Role permissions from the viewer's role
+function allowedRolesFor(role){
+  switch(String(role||'').toLowerCase()){
+    case 'admin': return ['zone','rm','sm','se'];
+    case 'zone':  return ['rm','sm','se'];
+    case 'rm':    return ['sm','se'];
+    case 'sm':    return ['se'];
+    default:      return [];
+  }
+}
+
+// Flatten a team tree -> [{role,userId,label}]
+function flattenMembers(scope, node){
+  const out = [];
+  const pushUser = (role, parentLabels, obj) => {
+    (obj.users||[]).forEach(u=>{
+      if (!u.userId) return;
+      const seg = (obj.name||role.toUpperCase()) + ' · ' + u.userId;
+      out.push({ role, userId: u.userId, label: [...parentLabels, seg].join(' / ') });
+    });
+  };
+  if (!node) return out;
+
+  if (scope === 'admin') {
+    (node||[]).forEach(zone=>{
+      pushUser('zone', [zone.name||'Zone'], zone);
+      (zone.rms||[]).forEach(rm=>{
+        pushUser('rm', [zone.name||'Zone', rm.name||'RM'], rm);
+        (rm.sms||[]).forEach(sm=>{
+          pushUser('sm', [zone.name||'Zone', rm.name||'RM', sm.name||'SM'], sm);
+          (sm.ses||[]).forEach(se=>{
+            pushUser('se', [zone.name||'Zone', rm.name||'RM', sm.name||'SM', se.name||'SE'], se);
+          });
+        });
+      });
+    });
+  } else if (scope === 'zone') {
+    pushUser('zone', [], node);
+    (node.rms||[]).forEach(rm=>{
+      pushUser('rm', [node.name||'Zone'], rm);
+      (rm.sms||[]).forEach(sm=>{
+        pushUser('sm', [node.name||'Zone', rm.name||'RM'], sm);
+        (sm.ses||[]).forEach(se=>{
+          pushUser('se', [node.name||'Zone', rm.name||'RM', sm.name||'SM'], se);
+        });
+      });
+    });
+  } else if (scope === 'rm') {
+    pushUser('rm', [], node);
+    (node.sms||[]).forEach(sm=>{
+      pushUser('sm', [node.name||'RM'], sm);
+      (sm.ses||[]).forEach(se=>{
+        pushUser('se', [node.name||'RM', sm.name||'SM'], se);
+      });
+    });
+  } else if (scope === 'sm') {
+    pushUser('sm', [], node);
+    (node.ses||[]).forEach(se=>{
+      pushUser('se', [node.name||'SM'], se);
+    });
+  } else if (scope === 'se') {
+    pushUser('se', [], node);
+  }
+  return out;
+}
+
+async function loadMyTeam(){
+  const res = await fetch(`${base}/admin/my-team`, {
+    headers: { 'Authorization': `Bearer ${AUTH.token}` }
+  });
+  if(!res.ok) throw new Error('Failed to load team');
+  return await res.json(); // { scope, root }
+}
+
+let allowedRoles = [];
+let allMembers   = []; // cache: [{role,userId,label}]
+
+function refreshUserList(){
+  const targetRole = roleSel.value;
+  const matches = allMembers.filter(m => m.role === targetRole);
+  if (matches.length === 0){
+    userSel.innerHTML = `<option value="" disabled selected>No members under ${targetRole.toUpperCase()}</option>`;
+  } else {
+    userSel.innerHTML = matches.map(m => `<option value="${m.userId}" data-role="${m.role}">${m.label}</option>`).join('');
+    userSel.selectedIndex = 0; // ensure a value is selected
+  }
+  // note for context
+  const opt = userSel.options[userSel.selectedIndex];
+  const who = opt ? opt.textContent : '';
+  noteEl.textContent = matches.length ? `Viewing ${targetRole.toUpperCase()} → ${who} (submitted records)` : '';
+}
+
+async function initSelectors(){
+  const meRole = (AUTH.user?.role || '').toLowerCase();
+  allowedRoles = allowedRolesFor(meRole);
+
+  if (allowedRoles.length === 0){
+    roleSel.innerHTML = `<option value="" disabled selected>Not allowed for your role</option>`;
+    userSel.innerHTML = `<option value="" disabled selected>No members</option>`;
+    return;
+  }
+  roleSel.innerHTML = allowedRoles.map(r=>`<option value="${r}">${r.toUpperCase()}</option>`).join('');
+
+  const { scope, root } = await loadMyTeam();
+  allMembers = flattenMembers(scope, root).filter(m => allowedRoles.includes(m.role));
+
+  refreshUserList();
+  // re-render whenever role or member changes
+  roleSel.addEventListener('change', () => { refreshUserList(); render(); });
+  userSel.addEventListener('change', render);
+  fromEl.addEventListener('change', render);
+  toEl.addEventListener('change', render);
+}
+
+async function fetchTeamRecords(){
+  const role = (roleSel.value || '').toLowerCase();
+  const userId = (userSel.value || '').trim();
+  if (!role || !userId) return [];
+
+  // Ask server to filter…
+  const qs = new URLSearchParams({
+    status: 'submitted',
+    createdByRole: role,
+    createdById: userId
+  });
+  if (fromEl.value) qs.append('from', fromEl.value);
+  if (toEl.value)   qs.append('to', toEl.value);
+
+  const res = await fetch(`${base}/records?${qs.toString()}`, {
+    headers: { 'Authorization': `Bearer ${AUTH.token}` }
+  });
+  if(!res.ok) throw new Error('Failed to load records');
+  const data = await res.json();
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+
+  // …and ALSO filter on the client to guarantee correctness
+  const picked = userId.toLowerCase();
+  return rows.filter(r => {
+    const creator =
+      (r?.createdBy?.emailOrId || r?.createdBy?.userId || '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    return creator === picked;
+  });
+}
+
+async function render(){
+  rowsEl.innerHTML = '';
+  const data = await fetchTeamRecords();
+  q('recCount').textContent = `(${data.length})`;
+  if (!data.length){
+    rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:24px">No records.</td></tr>`;
+    return;
+  }
+  for (const r of data){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${ddmmyyyy(r.date)}</td>
+      <td>${r._id || r.p_id || ''}</td>
+      <td>${r.project||''}</td>
+      <td class="right">${r.qty||0}</td>
+      <td>${r.grade||''}</td>
+      <td>${r.plant||''}</td>
+      <td>${(r.createdBy && r.createdBy.designation) ? r.createdBy.designation : ''}</td>
+      <td>${(r.createdBy && (r.createdBy.name || r.createdBy.emailOrId)) ? (r.createdBy.name || r.createdBy.emailOrId) : ''}</td>
+      <td class="right">${fmt2(r.pricing?.C4||0)}</td>
+      <td class="right">${fmt2(r.pricing?.C8||0)}</td>
+      <td class="right">${fmt2(r.pricing?.C9||0)}</td>
+      <td class="right">${fmt2(r.pricing?.C15||0)}</td>
+      <td><a href="view.html?id=${encodeURIComponent(r._id || r.p_id)}">VIEW</a></td>`;
+    rowsEl.appendChild(tr);
+  }
+}
+
+document.getElementById('apply').addEventListener('click', render);
+
+(async function boot(){
+  try{
+    await initSelectors();
+    await render();
+  }catch(e){
+    alert('Failed to load team records: ' + (e.message || e));
+  }
+})();
+</script>
+</body>
+</html>

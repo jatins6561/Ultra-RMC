@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Regional Dashboard — Ultratech RMC</title>
+<style>
+  :root{--bg:#dedede;--card:#fff;--ink:#2d2d2d;--line:#e5e7eb}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-radius:16px;margin:20px;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid var(--line)}
+  .title{font-weight:800;font-size:18px}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;font-weight:700;font-size:12px;cursor:pointer}
+  main{padding:20px}
+  .cards{display:grid;grid-template-columns:repeat(4, minmax(220px, 360px));gap:28px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;min-height:160px;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 26px rgba(0,0,0,.05)}
+  .card h2{margin:0;font-size:20px}
+  @media (max-width:1200px){.cards{grid-template-columns:repeat(2,minmax(220px,1fr))}}
+  @media (max-width:620px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">REGIONAL DASHBOARD</div>
+  <div><button id="logoutBtn" class="btn">Logout</button></div>
+</header>
+<main>
+  <section class="cards">
+    <div class="card" id="newEntry"><h2>NEW ENTRY</h2></div>
+    <div class="card" id="checkRecord"><h2>CHECK RECORD</h2></div>
+    <div class="card" id="drafts"><h2>DRAFTS</h2></div>
+    <div class="card" id="teamRecord"><h2>TEAM RECORD</h2></div>
+  </section>
+</main>
+<script src="auth.js"></script>
+<script>
+requireAuth();
+logoutBtn.onclick = logout;
+newEntry.onclick = ()=> location.href='calculator.html';
+checkRecord.onclick = ()=> location.href='records.html';
+drafts.onclick = ()=> alert('Drafts coming soon');
+// UPDATED: open team-records.html
+teamRecord.onclick = ()=> location.href='team-records.html';
+</script>
+</body>
+</html>

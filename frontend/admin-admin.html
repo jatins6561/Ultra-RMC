@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Admin Login Details — Ultratech RMC</title>
+<style>
+  :root{--bg:#dedede;--ink:#2d2d2d;--line:#e5e7eb}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  .wrap{min-height:100dvh;display:grid;place-items:center;padding:24px}
+  .card{width:min(680px,94vw);background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px 28px;box-shadow:0 8px 30px rgba(0,0,0,.06);display:grid;gap:14px}
+  .top{display:flex;align-items:center;justify-content:space-between}
+  h1{margin:0;font-size:20px;font-weight:800}
+  .row{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:12px;margin:8px 0}
+  label{font-size:14px;color:#444}
+  input[type=text],input[type=password]{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#f1f1f1;font-size:14px}
+  .check{display:flex;align-items:center;gap:8px}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;font-weight:700;font-size:12px;cursor:pointer}
+  .primary{background:#111;color:#fff;border-color:#111}
+  .bar{display:flex;gap:8px;align-items:center}
+  .foot{display:flex;justify-content:space-between;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="top">
+      <h1>ADMIN LOGIN DETAILS</h1>
+      <div class="bar">
+        <button id="editBtn" class="btn">Edit</button>
+        <button id="saveBtn" class="btn primary" disabled>Save</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>User Id</label>
+      <input id="userId" type="text" placeholder="Admin ID / Email" disabled>
+    </div>
+    <div class="row">
+      <label>Password</label>
+      <input id="pwd" type="password" placeholder="Password" disabled>
+    </div>
+    <div class="row" style="grid-template-columns:1fr">
+      <label class="check"><input id="show" type="checkbox"> Show password</label>
+    </div>
+
+    <div class="foot">
+      <button id="backBtn" class="btn">Back</button>
+      <span></span>
+    </div>
+  </div>
+</div>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+// Prefill with current user (fallback to stored)
+const u = (AUTH && AUTH.user) ? AUTH.user : null;
+document.getElementById('userId').value = u?.email || u?.name || '';
+
+const show = document.getElementById('show');
+const pwd  = document.getElementById('pwd');
+const edit = document.getElementById('editBtn');
+const save = document.getElementById('saveBtn');
+
+show.addEventListener('change', ()=>{ pwd.type = show.checked ? 'text' : 'password'; });
+
+edit.addEventListener('click', ()=>{
+  document.getElementById('userId').disabled = false;
+  pwd.disabled = false;
+  save.disabled = false;
+});
+
+save.addEventListener('click', async ()=>{
+  // Example update call; adjust backend path if needed
+  try{
+    const body = { email: document.getElementById('userId').value.trim(), password: pwd.value };
+    await apiFetch('/api/auth/update-admin', { method:'POST', body: JSON.stringify(body) });
+    alert('Saved!');
+    // update local user cache if email changed
+    if (AUTH.user) {
+      AUTH.user.email = body.email || AUTH.user.email;
+      AUTH.user = AUTH.user;
+    }
+    document.getElementById('userId').disabled = true;
+    pwd.disabled = true;
+    save.disabled = true;
+  }catch(e){
+    alert('Save failed: ' + e.message);
+  }
+});
+
+document.getElementById('backBtn').addEventListener('click', ()=> history.back());
+</script>
+</body>
+</html>

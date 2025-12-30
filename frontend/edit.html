@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Edit Draft — Ultratech RMC</title>
+<style>
+  :root{--bg:#f5f7fb;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#3b82f6;--accent-2:#1d4ed8;--warn:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink);padding-bottom:104px}
+  header{position:sticky;top:0;z-index:5;height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+  h1{font-size:16px;margin:0;font-weight:800}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:12px;text-decoration:none}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));border-color:var(--accent-2);color:#fff}
+  main{display:grid;gap:12px;padding:12px}
+  .chips{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;position:sticky;top:56px;z-index:4;background:var(--bg);padding-block:8px;border-bottom:1px solid var(--line)}
+  .chip{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px}
+  .chip label{font-size:12px;color:#475569;white-space:nowrap}
+  .chip input{border:none;background:transparent;font-size:12px;width:100%}
+  .chip input[aria-invalid="true"]{outline:none;border-radius:8px;border:1px solid var(--warn);background:#fff5f5;padding:6px 8px}
+  .req{color:var(--warn);margin-left:4px}
+  .cols{display:grid;grid-template-columns:1.1fr .9fr 1.05fr;gap:12px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;display:grid;grid-template-rows:auto 1fr}
+  .panel h2{margin:0;font-size:13px;font-weight:800;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafafa}
+  .scroll{overflow:auto;max-height:50vh}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid var(--line);padding:8px 10px;font-size:12px}
+  th{background:#f9fafb;text-align:left}
+  thead th{position:sticky;top:0;z-index:1}
+  tfoot tr{position:sticky;bottom:0;background:#fff;z-index:1}
+  tfoot tr:last-child{box-shadow:0 -6px 12px -8px rgba(0,0,0,.12)}
+  .right{text-align:right}
+  input[type=number], input[type=text]{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:12px}
+  input[readonly]{background:#f3f4f6;color:#4b5563}
+  .muted{color:#6b7280}
+  .kpis{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 12px;background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border-top:1px solid var(--line)}
+  .k{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fafafa}
+  .k .lab{font-size:11px;color:#334155}
+  .k .val{font-size:18px;font-weight:900}
+  .k .val.pos{color:#16a34a}
+  .k .val.neg{color:#dc2626}
+  @media (max-width:1280px){.chips{grid-template-columns:repeat(4,1fr)}.cols{grid-template-columns:1fr 1fr}}
+  @media (max-width:1024px){.chips{grid-template-columns:repeat(3,1fr)}.cols{grid-template-columns:1fr}table{min-width:680px}}
+  @media (max-width:768px){.chips{grid-template-columns:repeat(2,1fr)}.kpis{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:420px){.chips{grid-template-columns:1fr}table{min-width:560px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Edit Draft</h1>
+  <nav class="toolbar">
+    <a class="btn" href="drafts.html">Back to Drafts</a>
+    <button id="recalc" class="btn">Recalculate</button>
+    <button id="saveDraft" class="btn">Save</button>
+    <button id="submitRecord" class="btn primary">Submit</button>
+  </nav>
+</header>
+
+<main>
+  <div class="chips">
+    <div class="chip"><label>Quantity<span class="req">*</span></label><input id="orderQty" type="number" min="0.01" step="0.01" required></div>
+    <div class="chip"><label>Grade<span class="req">*</span></label><input id="grade" type="text" maxlength="20" required></div>
+    <div class="chip"><label>Project<span class="req">*</span></label><input id="project" type="text" maxlength="120" required></div>
+    <div class="chip"><label>Supply Plant<span class="req">*</span></label><input id="plant" type="text" maxlength="60" required></div>
+    <div class="chip"><label>Site Address</label><input id="site" type="text" maxlength="200"></div>
+    <div class="chip"><label>Pumping ₹/Cum</label><input id="P1" type="number"></div>
+  </div>
+
+  <div class="cols">
+    <section class="panel" style="grid-template-rows:auto 1fr auto">
+      <h2>Raw Material · RM Mix Cost</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Raw Material</th><th>RM Rate MT/KG</th><th>RM Mix / Cum</th><th>RM Cost / Cum</th><th style="width:36px"></th></tr></thead>
+          <tbody id="rmBody"></tbody>
+          <tfoot>
+            <tr><td class="right"><b>Total</b></td><td></td><td id="totalMixCell" class="right">0</td><td id="totalRmCostCell" class="right">0</td><td></td></tr>
+            <tr><td class="right"><b>Wastage @1%</b></td><td></td><td></td><td id="wastageCell" class="right">0</td><td></td></tr>
+            <tr><td class="right"><b>Total RM Cost</b></td><td></td><td></td><td id="totalRmWithWasteCell" class="right">0</td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px">
+        <div></div>
+        <div>
+          <button id="addMaterial" class="btn">+ Add Material</button>
+          <span class="muted">Enter Grade</span> <input id="gradeRecord" type="text" style="width:90px">
+          <span class="muted">Enter Mix</span> <input id="mixVersion" type="text" style="width:100px">
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>TM Charges · Input Data</h2>
+      <div class="scroll">
+        <table>
+          <tbody>
+            <tr><td>Hire Charges Per Day</td><td><input id="L7" type="number"></td></tr>
+            <tr><td>No of Trips Per Day</td><td><input id="L8" type="number"></td></tr>
+            <tr><td>Qty Per Trip / Cum</td><td><input id="L6" type="number"></td></tr>
+            <tr><td>Lead Distance One way KM</td><td><input id="L1" type="number"></td></tr>
+            <tr><td>Rate/ Km</td><td><input id="L3" type="number"></td></tr>
+            <tr><th colspan="2">Auto Calculated</th></tr>
+            <tr><td>Total Distance Two way KM</td><td><input id="L2" type="number" readonly></td></tr>
+            <tr><td>Total Cost in Rs./Trip</td><td><input id="L4" type="number" readonly></td></tr>
+            <tr><td>TM Diesel Cost / Cum</td><td><input id="L5" type="number" readonly></td></tr>
+            <tr><td>TM Hire Charges / Cum</td><td><input id="L9" type="number"></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" style="grid-template-rows:auto 1fr auto">
+      <h2>Contribution Calculation · Per Cum</h2>
+      <div class="scroll">
+        <table>
+          <tbody>
+            <tr><td>Gross Sale Price</td><td><input id="C1" type="number"></td></tr>
+            <tr><td>Excise</td><td><input id="C2" type="number"></td></tr>
+            <tr><td>GST @18%</td><td><input id="C3" type="number" readonly></td></tr>
+            <tr><td><b>Net Price / Cum</b></td><td><input id="C4" type="number" readonly></td></tr>
+            <tr><td>Raw Material Cost</td><td><input id="C5" type="number" readonly></td></tr>
+            <tr><td>TM Hire Charges</td><td><input id="C10" type="number"></td></tr>
+            <tr><td>TM Diesel Charges</td><td><input id="C6" type="number" readonly></td></tr>
+            <tr><td>Pumping Cost</td><td><input id="C7" type="number" readonly></td></tr>
+            <tr><td>Stores & Spares</td><td><input id="C11" type="number"></td></tr>
+            <tr><td>Power Cost</td><td><input id="C12" type="number"></td></tr>
+            <tr><td>SPC</td><td><input id="C13" type="number"></td></tr>
+            <tr><td><b>Raw Margin / Cum</b></td><td><input id="C8" type="number" readonly></td></tr>
+            <tr><td><b>Contribution / Cum</b></td><td><input id="C9" type="number" readonly></td></tr>
+            <tr><td>Fixed Expenses</td><td><input id="C14" type="number"></td></tr>
+            <tr><td><b>PBDIT / Cum</b></td><td><input id="C15" type="number" readonly></td></tr>
+            <tr><td>Interest & Depreciation</td><td><input id="C17" type="number"></td></tr>
+            <tr><td><b>PAT / Cum</b></td><td><input id="C16" type="number" readonly></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="kpis">
+        <div class="k"><div class="lab">Raw Margin / Cum</div><div id="kC8" class="val">0</div></div>
+        <div class="k"><div class="lab">Contribution / Cum</div><div id="kC9" class="val">0</div></div>
+        <div class="k"><div class="lab">PBDIT / Cum</div><div id="kC15" class="val">0</div></div>
+        <div class="k"><div class="lab">PAT / Cum</div><div id="kC16" class="val">0</div></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+const API = `${API_BASE}/api/records`;
+const q = (id)=> document.getElementById(id);
+const url = new URL(location.href);
+const recId = url.searchParams.get('id');
+
+const fmt = (n)=> Number.isFinite(n) ? Math.round(n*100)/100 : 0;
+const num = (v)=>{ const n=parseFloat(v); return Number.isFinite(n)? n:0; };
+
+const rmBody = q('rmBody');
+
+function addRow(m={}){
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td><input class="m-name" type="text" value="${m.name||''}"></td>
+    <td><input class="m-rate" type="number" step="0.01" value="${m.rate??0}"></td>
+    <td><input class="m-mix" type="number" step="0.01" value="${m.mix??0}"></td>
+    <td><input class="m-cost" type="number" readonly></td>
+    <td class="right"><button class="btn" style="padding:4px 8px">✕</button></td>`;
+  rmBody.appendChild(tr);
+  tr.querySelector('button').addEventListener('click', ()=>{ tr.remove(); recalc(); });
+  ['input','change'].forEach(e=> tr.addEventListener(e, recalc));
+}
+
+q('addMaterial').addEventListener('click', ()=> addRow({name:'',rate:0,mix:0}));
+
+function recalc(){
+  // RM
+  let totalMix=0,totalCost=0;
+  [...rmBody.querySelectorAll('tr')].forEach(tr=>{
+    const name=tr.querySelector('.m-name').value.toLowerCase();
+    const rate=num(tr.querySelector('.m-rate').value);
+    const mix=num(tr.querySelector('.m-mix').value);
+    totalMix+=mix;
+    let unit='MT'; if(name.includes('/kg')||name.includes(' kg')) unit='KG'; if(name.includes('ltr')||name.includes('water')) unit='LTR';
+    const cost = unit==='MT' ? (rate*mix)/1000 : (rate*mix);
+    tr.querySelector('.m-cost').value = fmt(cost);
+    totalCost += cost;
+  });
+  const wastage=totalCost*0.01, F=totalCost+wastage;
+  q('totalMixCell').textContent=fmt(totalMix).toFixed(2);
+  q('totalRmCostCell').textContent=fmt(totalCost).toFixed(2);
+  q('wastageCell').textContent=fmt(wastage).toFixed(2);
+  q('totalRmWithWasteCell').textContent=fmt(F).toFixed(2);
+  q('C5').value=fmt(F);
+
+  // TM
+  const L1=num(q('L1').value), L3=num(q('L3').value), L6=num(q('L6').value), L7=num(q('L7').value), L8=num(q('L8').value);
+  const L2=L1*2, L4=L3*L2, L5=L6? (L4/L6):0, L9=L8? (L7*L6)/L8:0;
+  q('L2').value=fmt(L2); q('L4').value=fmt(L4); q('L5').value=fmt(L5);
+  if(!q('L9').matches(':focus')) q('L9').value=fmt(L9);
+  q('C6').value=fmt(num(q('L5').value));
+
+  // Contribution
+  const C1=num(q('C1').value), C2=num(q('C2').value);
+  const C3=((C1-C2)*18)/118, C4=C1-C2-C3;
+  const C5v=num(q('C5').value), C6v=num(q('C6').value), C7=num(q('P1').value),
+        C10=num(q('C10').value||q('L9').value), C11=num(q('C11').value), C12=num(q('C12').value), C13=num(q('C13').value), C14=num(q('C14').value), C17=num(q('C17').value);
+  q('C3').value=fmt(C3); q('C4').value=fmt(C4);
+  const C8=C4-C5v, C9=C4-C5v-C10-C6v-C7-C11-C12-C13, C15=C9-C14, C16=C15-C17;
+  q('C7').value=fmt(C7); q('C8').value=fmt(C8); q('C9').value=fmt(C9); q('C15').value=fmt(C15); q('C16').value=fmt(C16);
+
+  // KPI colors
+  const setK=(id,val)=>{
+    const el=q(id); el.textContent=fmt(val).toFixed(2);
+    el.classList.remove('pos','neg'); el.classList.add(val>=0?'pos':'neg');
+  };
+  setK('kC8',C8); setK('kC9',C9); setK('kC15',C15); setK('kC16',C16);
+}
+
+['input','change'].forEach(evt=> document.body.addEventListener(evt, (e)=>{ if(e.target.closest('input')) recalc(); }));
+q('recalc').addEventListener('click', recalc);
+
+// required fields
+const requiredIds = ['orderQty','project','grade','plant'];
+function markValidity(){
+  let ok=true;
+  requiredIds.forEach(id=>{
+    const el=q(id);
+    const val=(el.value||'').trim();
+    let valid=id==='orderQty'? parseFloat(val)>0 : val.length>0;
+    el.setAttribute('aria-invalid', valid ? 'false' : 'true');
+    ok = ok && valid;
+  });
+  return ok;
+}
+
+// build payload from UI
+function buildPayload(){
+  const materials=[...rmBody.querySelectorAll('tr')].map(tr=>({
+    name: tr.querySelector('.m-name').value,
+    rate: num(tr.querySelector('.m-rate').value),
+    mix:  num(tr.querySelector('.m-mix').value),
+    cost: num(tr.querySelector('.m-cost').value),
+  }));
+  return {
+    date: new Date().toISOString(),
+    project: q('project').value.trim(),
+    qty: num(q('orderQty').value),
+    grade: q('grade').value.trim(),
+    plant: q('plant').value.trim(),
+    site: q('site').value,
+    grade_record: q('gradeRecord').value,
+    mix_version: q('mixVersion').value,
+    pump: { P1: num(q('P1').value) },
+    tm: { L1:num(q('L1').value), L2:num(q('L2').value), L3:num(q('L3').value), L4:num(q('L4').value), L5:num(q('L5').value), L6:num(q('L6').value), L7:num(q('L7').value), L8:num(q('L8').value), L9:num(q('L9').value) },
+    pricing: { C1:num(q('C1').value), C2:num(q('C2').value), C3:num(q('C3').value), C4:num(q('C4').value), C5:num(q('C5').value), C6:num(q('C6').value), C7:num(q('C7').value), C8:num(q('C8').value), C9:num(q('C9').value), C10:num(q('C10').value), C11:num(q('C11').value), C12:num(q('C12').value), C13:num(q('C13').value), C14:num(q('C14').value), C15:num(q('C15').value), C16:num(q('C16').value), C17:num(q('C17').value) },
+    materials
+  };
+}
+
+// load existing
+async function load(){
+  if(!recId){ alert('Missing id'); location.href='drafts.html'; return; }
+  const res = await fetch(`${API}/${recId}`, {
+    headers: { 'Authorization': `Bearer ${AUTH.token}` }
+  });
+  if(!res.ok){ alert('Failed to load'); location.href='drafts.html'; return; }
+  const r = await res.json();
+
+  // fill chips
+  q('orderQty').value = r.qty ?? '';
+  q('grade').value = r.grade ?? '';
+  q('project').value = r.project ?? '';
+  q('plant').value = r.plant ?? '';
+  q('site').value = r.site ?? '';
+  q('P1').value = r.pump?.P1 ?? 200;
+
+  q('gradeRecord').value = r.grade_record ?? '';
+  q('mixVersion').value = r.mix_version ?? '';
+
+  // tm
+  const t = r.tm || {};
+  ['L1','L2','L3','L4','L5','L6','L7','L8','L9'].forEach(k=> q(k).value = t[k] ?? '');
+
+  // pricing
+  const p = r.pricing || {};
+  ['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','C11','C12','C13','C14','C15','C16','C17']
+    .forEach(k=> q(k).value = p[k] ?? '');
+
+  // materials
+  (r.materials||[]).forEach(addRow);
+  if ((r.materials||[]).length===0) addRow({});
+
+  markValidity();
+  recalc();
+}
+
+// save (keep as draft)
+q('saveDraft').addEventListener('click', async ()=>{
+  try{
+    recalc();
+    const payload = buildPayload();
+    payload.status = 'draft';
+    const res = await fetch(`${API}/${recId}`, {
+      method:'PATCH',
+      headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${AUTH.token}` },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error('Save failed');
+    alert('Saved draft');
+  }catch(e){ alert(e.message||'Save failed'); }
+});
+
+// submit
+q('submitRecord').addEventListener('click', async ()=>{
+  try{
+    if(!markValidity()){ alert('Please fill required fields'); return; }
+    recalc();
+    const res = await fetch(`${API}/${recId}/submit`, {
+      method:'PATCH',
+      headers:{ 'Authorization': `Bearer ${AUTH.token}` }
+    });
+    if(!res.ok) throw new Error('Submit failed');
+    alert('Submitted!');
+    location.href='records.html';
+  }catch(e){ alert(e.message||'Submit failed'); }
+});
+
+load();
+</script>
+</body>
+</html>

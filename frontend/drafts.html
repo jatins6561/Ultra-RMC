@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Drafts — Ultratech RMC</title>
+<style>
+  :root{--bg:#f5f7fb;--ink:#111827;--line:#e5e7eb}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f7fb;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:#111827}
+  header{position:sticky;top:0;z-index:5;height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+  h1{font-size:16px;margin:0;font-weight:800}
+  .toolbar{margin-left:auto;display:flex;gap:8px}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:12px;text-decoration:none}
+  .btn.danger{border-color:#ef4444;color:#ef4444}
+  .btn.primary{background:#111;color:#fff;border-color:#111}
+  main{padding:12px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:auto}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--line);padding:10px 12px;font-size:12px;white-space:nowrap}
+  th{background:#f9fafb;text-align:left;position:sticky;top:0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Drafts</h1>
+  <nav class="toolbar">
+    <a class="btn" href="calculator.html">New Entry</a>
+    <a class="btn" href="records.html">Submitted</a>
+  </nav>
+</header>
+<main>
+  <div class="card">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Project</th>
+          <th>Grade</th>
+          <th>Qty</th>
+          <th>Plant</th>
+          <th>Created By</th>
+          <th>Designation</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+const tbody = document.querySelector('#tbl tbody');
+
+function fmtDate(s){
+  const d = new Date(s || Date.now());
+  return d.toLocaleString();
+}
+
+async function loadDrafts(){
+  const res = await fetch(`${API_BASE}/api/records?status=draft`, {
+    headers: { 'Authorization': `Bearer ${AUTH.token}` }
+  });
+  if(!res.ok){
+    tbody.innerHTML = `<tr><td colspan="8">Failed to load</td></tr>`;
+    return;
+  }
+  const data = await res.json();
+  const rows = data.rows || [];
+  if (!rows.length){
+    tbody.innerHTML = `<tr><td colspan="8">No drafts yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${fmtDate(r.createdAt || r.date)}</td>
+      <td>${r.project||''}</td>
+      <td>${r.grade||''}</td>
+      <td>${r.qty||''}</td>
+      <td>${r.plant||''}</td>
+      <td>${(r.createdBy?.name||'').toString()} <span style="color:#6b7280">(${r.createdBy?.emailOrId || ''})</span></td>
+      <td>${r.createdBy?.designation || ''}</td>
+      <td>
+        <a class="btn" href="edit.html?id=${r._id}">Edit</a>
+        <button class="btn danger" data-del="${r._id}">Delete</button>
+        <button class="btn primary" data-submit="${r._id}">Submit</button>
+      </td>
+    </tr>
+  `).join('');
+
+  // wire buttons
+  tbody.querySelectorAll('[data-submit]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.getAttribute('data-submit');
+      if(!confirm('Submit this draft?')) return;
+      const res2 = await fetch(`${API_BASE}/api/records/${id}/submit`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${AUTH.token}` }
+      });
+      if(!res2.ok){ alert('Submit failed'); return; }
+      alert('Submitted!');
+      loadDrafts();
+    });
+  });
+
+  tbody.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.getAttribute('data-del');
+      if(!confirm('Delete this draft?')) return;
+      const res2 = await fetch(`${API_BASE}/api/records/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${AUTH.token}` }
+      });
+      if(!res2.ok){ alert('Delete failed'); return; }
+      loadDrafts();
+    });
+  });
+}
+
+loadDrafts();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Saved Calculations</title>
+<style>
+  :root{--bg:#f3f4f6;--card:#ffffff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#3b82f6;--accent-2:#1d4ed8}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:18px;font-weight:800}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  .filters{display:grid;grid-template-columns:1fr 1fr auto auto;gap:16px;align-items:end;margin:10px 0 16px}
+  .field{display:flex;flex-direction:column;gap:6px} label{font-size:12px;color:var(--muted)}
+  input[type=date]{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;font-size:12px}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer;text-decoration:none;color:inherit}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));border-color:var(--accent-2);color:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .card h2{margin:0;font-size:13px;font-weight:800;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
+  .table-wrap{max-height:62vh;overflow:auto}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap}
+  th{position:sticky;top:0;background:#f1f5f9;border-bottom:1px solid var(--line);text-align:left}
+  td.right{text-align:right} td a{color:#3b82f6;text-decoration:none;font-weight:700}
+  @media (max-width:900px){main{padding:10px}.filters{grid-template-columns:1fr 1fr}.table-wrap{max-height:none}table{min-width:960px}}
+</style>
+</head>
+<body>
+<header><h1>CHECK RECORD</h1></header>
+<main>
+  <section class="filters card" style="padding:12px">
+    <div class="field"><label>From</label><input id="fromDate" type="date"/></div>
+    <div class="field"><label>To</label><input id="toDate" type="date"/></div>
+    <button id="apply" class="btn primary">Apply</button>
+    <a class="btn" href="calculator.html">New Calculation</a>
+    <a class="btn" href="drafts.html">Drafts</a>
+  </section>
+
+  <section class="card">
+    <h2>Saved Calculations <span id="recCount" style="font-weight:700;color:#1d4ed8;margin-left:6px"></span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:110px">Date</th>
+            <th style="width:160px">P_ID</th>
+            <th>Project Name</th>
+            <th style="width:90px">Quantity</th>
+            <th style="width:80px">Grade</th>
+            <th style="width:120px">Supply Plant</th>
+            <th style="width:120px">Created By</th>
+            <th style="width:140px">Designation</th>
+            <th style="width:100px">Net Price</th>
+            <th style="width:110px">Raw Margin</th>
+            <th style="width:110px">Contribution</th>
+            <th style="width:90px">PBDIT</th>
+            <th style="width:80px">Details</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+const API = `${API_BASE}/api/records`;
+const rowsEl  = document.getElementById('rows');
+const fromEl  = document.getElementById('fromDate');
+const toEl    = document.getElementById('toDate');
+const countEl = document.getElementById('recCount');
+
+const fmt2 = (n)=> Number.isFinite(n) ? Math.round(n*100)/100 : 0;
+const ddmmyyyy = (iso)=>{ const d=new Date(iso||Date.now()); const dd=String(d.getDate()).padStart(2,'0'); const mm=String(d.getMonth()+1).padStart(2,'0'); const yy=d.getFullYear(); return `${dd}.${mm}.${yy}`; };
+
+function designationFromRole(role){
+  switch(String(role||'').toLowerCase()){
+    case 'zone': return 'Zonal Head';
+    case 'rm': return 'Regional Manager';
+    case 'sm': return 'Sales Manager';
+    case 'se': return 'Sales Executive';
+    case 'admin': return 'Admin';
+    default: return 'User';
+  }
+}
+
+// Identify the logged-in user for filtering
+const MY_ROLE = (AUTH.user?.role || '').toLowerCase();
+const MY_ID   = (AUTH.user?.email || AUTH.user?.emailOrId || AUTH.user?.id || '').trim();
+
+/** Fetch only my submitted records from the server */
+async function getRecords(){
+  const params = new URLSearchParams();
+  params.set('status','submitted');
+
+  // date range (optional)
+  if (fromEl.value) params.set('from', fromEl.value);
+  if (toEl.value)   params.set('to', toEl.value);
+
+  // restrict to creator = me
+  if (MY_ROLE) params.set('createdByRole', MY_ROLE);
+  if (MY_ID)   params.set('createdById',   MY_ID);
+
+  const url = `${API}?${params.toString()}`;
+  const res = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${AUTH.token}` }
+  });
+  if(!res.ok) throw new Error('List failed');
+  const data = await res.json();
+
+  // Safety: also filter client-side to my exact id
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  return rows.filter(r => (r?.createdBy?.emailOrId || '').trim().toLowerCase() === MY_ID.toLowerCase());
+}
+
+async function render(){
+  rowsEl.innerHTML = '';
+  try{
+    const rows = await getRecords();
+    countEl.textContent = `(${rows.length})`;
+
+    if(!rows.length){
+      rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:24px">No records.</td></tr>`;
+      return;
+    }
+
+    for (const r of rows){
+      const createdByName = (r.createdBy?.name || '').toString();
+      const createdById = r.createdBy?.emailOrId || '';
+      const createdBy = createdByName ? `${createdByName} (${createdById})` : createdById;
+      const desg = r.createdBy?.designation || designationFromRole(r.createdBy?.role);
+
+      const recId = r._id || r.p_id || ''; // <- fallback ensures correct deep-link
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ddmmyyyy(r.createdAt || r.date)}</td>
+        <td>${recId}</td>
+        <td>${r.project||''}</td>
+        <td class="right">${r.qty||0}</td>
+        <td>${r.grade||''}</td>
+        <td>${r.plant||''}</td>
+        <td>${createdBy}</td>
+        <td>${desg||''}</td>
+        <td class="right">${fmt2(r.pricing?.C4||0)}</td>
+        <td class="right">${fmt2(r.pricing?.C8||0)}</td>
+        <td class="right">${fmt2(r.pricing?.C9||0)}</td>
+        <td class="right">${fmt2(r.pricing?.C15||0)}</td>
+        <td>${recId ? `<a href="view.html?id=${encodeURIComponent(recId)}">VIEW</a>` : '-'}</td>
+      `;
+      rowsEl.appendChild(tr);
+    }
+  }catch(e){
+    countEl.textContent = '';
+    rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#b91c1c;padding:24px">Failed to load records</td></tr>`;
+    console.error(e);
+  }
+}
+
+document.getElementById('apply').addEventListener('click', render);
+render();
+</script>
+</body>
+</html>

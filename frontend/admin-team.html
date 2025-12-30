@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Create Team — Ultratech RMC</title>
+<style>
+  :root{--bg:#dedede;--ink:#2d2d2d;--line:#e5e7eb}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  .wrap{min-height:100dvh;padding:20px}
+  .head{display:flex;align-items:center;justify-content:space-between;margin:8px 0 14px}
+  h1{margin:0;font-size:18px;font-weight:800}
+  .crumb{font-size:13px;color:#444}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;font-weight:700;font-size:12px;cursor:pointer}
+  .primary{background:#111;color:#fff;border-color:#111}
+  .danger{background:#b91c1c;color:#fff;border-color:#b91c1c}
+  .grid{display:grid;grid-template-columns:repeat(3, minmax(240px, 1fr));gap:16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:10px}
+  .title{font-weight:800}
+  input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#f4f4f4;font-size:13px}
+  .row{display:grid;gap:8px}
+  .actions{display:flex;gap:8px;align-items:center;justify-content:space-between}
+  .muted{color:#6b7280;font-size:12px}
+  @media (max-width:1020px){.grid{grid-template-columns:repeat(2, minmax(240px, 1fr))}}
+  @media (max-width:680px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>CREATE TEAM</h1>
+      <div id="crumb" class="crumb">Zone</div>
+      <div class="muted">Saved credentials persist until edited or deleted. Passwords are securely hashed on server.</div>
+    </div>
+    <div class="actions">
+      <button id="clearBtn" class="btn danger">Clear All</button>
+      <button id="backBtn" class="btn">Back</button>
+      <button id="saveBtn" class="btn primary">Save</button>
+    </div>
+  </div>
+
+  <div class="grid" id="cards"></div>
+  <p class="muted">Add items with “+” and fill Login Details at each level: Zone → RM → SM → SE.</p>
+</div>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+let level = 0; // 0=Zone,1=RM,2=SM,3=SE
+let trail = []; // path indices
+let team = [];  // zones array
+const cards = document.getElementById('cards');
+const crumb = document.getElementById('crumb');
+
+function labelForLevel(l){ return ['Zone', 'RM', 'SM', 'SE'][l]; }
+
+function currentCollection(){
+  let arr = team;
+  if (trail.length===0) return arr;
+  const z = trail[0];
+  if (trail.length===1) return team[z].rms;
+  const r = trail[1];
+  if (trail.length===2) return team[z].rms[r].sms;
+  const s = trail[2];
+  return team[z].rms[r].sms[s].ses;
+}
+
+function ensureStructure(obj){
+  if (level===0){ obj.rms = obj.rms || []; }
+  if (level===1){ obj.sms = obj.sms || []; }
+  if (level===2){ obj.ses = obj.ses || []; }
+  obj.users = obj.users || [{ userId:'', password:'' }];
+}
+
+function render(){
+  crumb.textContent =
+    trail.length===0 ? 'Zone' :
+    trail.length===1 ? `Zone ${trail[0]+1}` :
+    trail.length===2 ? `Zone ${trail[0]+1} · RM ${trail[1]+1}` :
+    `Zone ${trail[0]+1} · RM ${trail[1]+1} · SM ${trail[2]+1}`;
+
+  level = trail.length;
+  const data = currentCollection();
+  cards.innerHTML = '';
+
+  data.forEach((item, idx)=>{
+    ensureStructure(item);
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML = `
+      <div class="actions">
+        <div class="title">${labelForLevel(level)} ${idx+1}</div>
+        <button class="btn danger" data-del="${idx}">Delete</button>
+      </div>
+      <div class="row"><input data-k="name" data-i="${idx}" type="text" placeholder="${labelForLevel(level)} name" value="${item.name||''}"></div>
+      <div class="row">
+        <div class="title">Login Details</div>
+        <input data-k="userId" data-i="${idx}" type="text" placeholder="User Id" value="${item.users?.[0]?.userId||''}">
+        <input data-k="password" data-i="${idx}" type="password" placeholder="Password (leave blank to keep existing)">
+      </div>
+      ${level<3 ? `<div class="actions"><button class="btn right" data-next="${idx}">Open ${labelForLevel(level+1)}s →</button></div>` : ''}
+    `;
+    cards.appendChild(c);
+  });
+
+  // + Add card
+  const add = document.createElement('div');
+  add.className='card';
+  add.style.display='grid';
+  add.style.placeItems='center';
+  add.innerHTML = `<button id="addBtn" class="btn">+ Add ${labelForLevel(level)}</button>`;
+  cards.appendChild(add);
+
+  // wiring
+  cards.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const i = +inp.dataset.i, k = inp.dataset.k;
+      const col = currentCollection();
+      ensureStructure(col[i]);
+      if (k==='name') col[i].name = inp.value;
+      if (k==='userId') col[i].users[0].userId = inp.value;
+      if (k==='password') col[i].users[0].password = inp.value;
+    });
+  });
+
+  cards.querySelectorAll('[data-next]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      trail.push(+btn.dataset.next);
+      render();
+    });
+  });
+
+  cards.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = +btn.dataset.del;
+      const col = currentCollection();
+      col.splice(i,1);
+      render();
+    });
+  });
+
+  document.getElementById('addBtn').onclick = ()=>{
+    const col = currentCollection();
+    col.push({ name:`${labelForLevel(level)} ${col.length+1}`, users:[{userId:'', password:''}] });
+    render();
+  };
+}
+
+// Load saved team from backend
+async function loadTeam(){
+  try{
+    const res = await apiFetch('/api/admin/team', { method:'GET' });
+    if(res?.team?.length){
+      team = res.team;
+    } else {
+      team = [{ name:'Zone 1', users:[{userId:'', password:''}], rms:[] }];
+    }
+    render();
+  }catch(e){
+    alert('Failed to load team: '+e.message);
+    team = [{ name:'Zone 1', users:[{userId:'', password:''}], rms:[] }];
+    render();
+  }
+}
+
+// Save team to backend
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  try{
+    // Remove empty passwords (don’t overwrite existing hashes)
+    const copy = JSON.parse(JSON.stringify(team));
+    const clean = (arr)=>arr?.forEach(x=>{
+      if (x?.users?.[0] && !x.users[0].password) delete x.users[0].password;
+      x?.rms?.length && clean(x.rms);
+      x?.sms?.length && clean(x.sms);
+      x?.ses?.length && clean(x.ses);
+    });
+    clean(copy);
+    await apiFetch('/api/admin/team', { method:'POST', body: JSON.stringify({ team: copy }) });
+    alert('Team saved successfully! Saved login details can now be used by each user.');
+  }catch(e){
+    alert('Save failed: ' + e.message);
+  }
+});
+
+// Clear all team
+document.getElementById('clearBtn').addEventListener('click', async ()=>{
+  if(!confirm('This will delete all saved team data. Continue?')) return;
+  try{
+    await apiFetch('/api/admin/team', { method:'DELETE' });
+    team = [{ name:'Zone 1', users:[{userId:'', password:''}], rms:[] }];
+    trail = [];
+    render();
+    alert('Team cleared.');
+  }catch(e){
+    alert('Failed to clear: '+e.message);
+  }
+});
+
+// Back navigation
+document.getElementById('backBtn').addEventListener('click', ()=>{
+  if (trail.length>0){ trail.pop(); render(); }
+  else history.back();
+});
+
+loadTeam();
+</script>
+</body>
+</html>
