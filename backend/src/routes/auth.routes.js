@@ -1,3 +1,4 @@
+// backend/src/routes/auth.routes.js
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -34,7 +35,9 @@ async function findTeamLogin(emailOrId, plainPassword) {
       if (!ciEq(user.userId, emailOrId)) return null;
       const ok = await bcrypt.compare(plainPassword, user.passwordHash);
       if (!ok) return null;
-      return { id: `team:${t._id.toString()}`, email: user.userId, role };
+      // Use a synthetic id namespaced to the team doc
+      return { id: `${t._id.toString()}:${user.userId}`
+, email: user.userId, role };
     };
 
     const zones = t.team || [];
@@ -68,43 +71,7 @@ async function findTeamLogin(emailOrId, plainPassword) {
 
 /* -------------------------- Auth Endpoints -------------------------- */
 
-/**
- * ✅ ONE-TIME ADMIN SEED (BROWSER FRIENDLY)
- * Visit: GET /api/auth/seed-admin
- */
-router.get('/seed-admin', async (req, res) => {
-  try {
-    const email = 'admin@demo.local';
-    const password = 'Ultra@5';
-
-    const exists = await User.findOne({ email });
-    if (exists) {
-      return res.json({ ok: true, message: 'Admin already exists', email });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      name: 'Admin',
-      email,
-      passwordHash,
-      role: 'admin',
-    });
-
-    return res.json({
-      ok: true,
-      message: 'Admin user created',
-      email,
-      password,
-    });
-  } catch (err) {
-    console.error('seed-admin error:', err);
-    return res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/**
- * (Optional) POST seed-admin (kept as-is)
- */
+// (Optional) quick seed user if none exists
 router.post('/seed-admin', async (req, res) => {
   try {
     const { name = 'Admin', email, password } = req.body || {};
@@ -140,29 +107,26 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login -> JWT (supports admin/user and team roles)
+// Login -> JWT (supports admin/user and team roles zone/rm/sm/se)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email & password required' });
 
+    // 1) Try User collection (admin/regular)
     const user = await User.findOne({ email });
     if (user) {
       const ok = await bcrypt.compare(password, user.passwordHash);
       if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-      const token = signToken({
-        id: user._id.toString(),
-        email: user.email,
-        role: user.role || 'user',
-      });
-
+      const token = signToken({ id: user._id.toString(), email: user.email, role: user.role || 'user' });
       return res.json({
         token,
         user: { id: user._id, name: user.name, email: user.email, role: user.role || 'user' },
       });
     }
 
+    // 2) Else try Team nested credentials
     const teamLogin = await findTeamLogin(email, password);
     if (!teamLogin) return res.status(401).json({ error: 'Invalid credentials' });
 
@@ -180,6 +144,7 @@ router.post('/login', async (req, res) => {
 // Me
 router.get('/me', authRequired, async (req, res) => {
   try {
+    // For team logins (id starts with "team:"), we just echo token info
     if (String(req.user.id || '').startsWith('team:')) {
       return res.json({ user: { id: req.user.id, email: req.user.email, role: req.user.role } });
     }
@@ -192,7 +157,7 @@ router.get('/me', authRequired, async (req, res) => {
   }
 });
 
-// Update admin email/password
+// Update admin email/password (used by admin-admin.html)
 router.post('/update-admin', authRequired, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
@@ -206,7 +171,6 @@ router.post('/update-admin', authRequired, async (req, res) => {
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
-
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { $set: update },
