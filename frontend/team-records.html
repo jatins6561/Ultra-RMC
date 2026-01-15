@@ -193,10 +193,7 @@ function refreshUserList(){
     userSel.innerHTML = matches.map(m => `<option value="${m.userId}" data-role="${m.role}">${m.label}</option>`).join('');
     userSel.selectedIndex = 0; // ensure a value is selected
   }
-  // note for context
-  const opt = userSel.options[userSel.selectedIndex];
-  const who = opt ? opt.textContent : '';
-  noteEl.textContent = matches.length ? `Viewing ${targetRole.toUpperCase()} → ${who} (submitted records)` : '';
+ 
 }
 
 async function initSelectors(){
@@ -260,6 +257,15 @@ async function render(){
   q('recCount').textContent = `(${data.length})`;
   if (!data.length){
     rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:24px">No records.</td></tr>`;
+    const role = roleSel.value;
+const userOpt = userSel.options[userSel.selectedIndex];
+const userLabel = userOpt ? userOpt.textContent : '';
+
+noteEl.textContent = role && userLabel
+  ? `Viewing ${role.toUpperCase()} → ${userLabel} (submitted records)`
+  : '';
+
+    
     return;
   }
   for (const r of data){
