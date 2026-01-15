@@ -220,7 +220,13 @@ router.get('/', authRequired, async (req, res) => {
   try {
     const { status, from, to, createdByRole, createdById } = req.query;
 
-    const q = {};
+    const q = {
+  $or: [
+    { 'createdBy.userId': req.user.id },
+    { 'createdBy.emailOrId': req.user.email }
+  ]
+};
+
     if (status && ['draft', 'submitted'].includes(String(status).toLowerCase())) {
       q.status = String(status).toLowerCase();
     }
@@ -348,7 +354,11 @@ router.get('/by/team', authRequired, async (req, res) => {
  */
 router.get('/:id', authRequired, async (req, res) => {
   try {
-    const doc = await Record.findById(req.params.id).lean();
+    const doc = await Record.findOne({
+  _id: req.params.id,
+  'createdBy.userId': req.user.id
+}).lean();
+
     if (!doc) return res.status(404).json({ error: 'Not found' });
     return res.json(doc);
   } catch (err) {
@@ -384,7 +394,12 @@ router.patch('/:id', authRequired, async (req, res) => {
       payload.status = String(src.status).toLowerCase();
     }
 
-    const rec = await Record.findByIdAndUpdate(id, { $set: payload }, { new: true });
+    const rec = await Record.findOneAndUpdate(
+  { _id: id, 'createdBy.userId': req.user.id },
+  { $set: payload },
+  { new: true }
+);
+
     if (!rec) return res.status(404).json({ error: 'Not found' });
 
     return res.json({ ok: true });
@@ -398,7 +413,11 @@ router.patch('/:id', authRequired, async (req, res) => {
 router.delete('/:id', authRequired, async (req, res) => {
   try {
     const id = req.params.id;
-    const out = await Record.findByIdAndDelete(id);
+    const out = await Record.findOneAndDelete({
+  _id: id,
+  'createdBy.userId': req.user.id
+});
+
     if (!out) return res.status(404).json({ error: 'Not found' });
     return res.json({ ok: true });
   } catch (err) {
@@ -411,11 +430,12 @@ router.delete('/:id', authRequired, async (req, res) => {
 router.patch('/:id/submit', authRequired, async (req, res) => {
   try {
     const id = req.params.id;
-    const rec = await Record.findByIdAndUpdate(
-      id,
-      { $set: { status: 'submitted' } },
-      { new: true }
-    );
+    const rec = await Record.findOneAndUpdate(
+  { _id: id, 'createdBy.userId': req.user.id },
+  { $set: { status: 'submitted' } },
+  { new: true }
+);
+
     if (!rec) return res.status(404).json({ error: 'Not found' });
     return res.json({ ok: true, status: rec.status });
   } catch (err) {
