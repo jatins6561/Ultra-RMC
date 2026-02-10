@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Team Performance Matrix</title>
+
+<style>
+*{
+  box-sizing:border-box;
+  font-family:Inter,system-ui;
+}
+
+body{
+  margin:0;
+  background:#f4f6fb;
+}
+
+main{
+  max-width:1200px;
+  margin:40px auto;
+  padding:0 20px;
+}
+
+.card{
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.08);
+  overflow:hidden;
+}
+
+.header{
+  padding:22px 28px;
+  background:linear-gradient(135deg,#2563eb,#4f46e5);
+  color:white;
+  font-size:20px;
+  font-weight:600;
+}
+
+.filters{
+  padding:16px 28px;
+  display:flex;
+  gap:12px;
+  align-items:center;
+  border-bottom:1px solid #eee;
+}
+
+.filters input{
+  padding:8px 12px;
+  border-radius:8px;
+  border:1px solid #ddd;
+}
+
+.filters button{
+  padding:8px 20px;
+  background:#2563eb;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.filters button:hover{
+  opacity:.9;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+thead{
+  background:#f9fafb;
+}
+
+th{
+  padding:14px 20px;
+  text-align:left;
+  font-weight:600;
+}
+
+td{
+  padding:14px 20px;
+  border-top:1px solid #eee;
+}
+
+tbody tr:hover{
+  background:#f8fafc;
+}
+
+.badge{
+  background:#dcfce7;
+  color:#166534;
+  padding:6px 12px;
+  border-radius:20px;
+  font-size:13px;
+  font-weight:600;
+}
+
+/* hierarchy indentation */
+.role-rm td.user { padding-left:20px; font-weight:600; }
+.role-sm td.user { padding-left:40px; }
+.role-se td.user { padding-left:60px; }
+
+.empty{
+  text-align:center;
+  padding:40px;
+  color:#6b7280;
+}
+</style>
+</head>
+
+<body>
+
+<main>
+
+<div class="card">
+
+<div class="header">Team Performance Matrix</div>
+
+<div class="filters">
+From <input type="date" id="from">
+To <input type="date" id="to">
+<button id="apply">Apply</button>
+</div>
+
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Role</th>
+<th>User</th>
+<th>Total Records</th>
+</tr>
+</thead>
+
+<tbody id="rows"></tbody>
+</table>
+
+<div id="empty" class="empty" style="display:none">
+No submissions found.
+</div>
+
+</div>
+
+</main>
+
+<script src="auth.js"></script>
+
+<script>
+requireAuth();
+
+const rows = document.getElementById('rows');
+const from = document.getElementById('from');
+const to = document.getElementById('to');
+const apply = document.getElementById('apply');
+const empty = document.getElementById('empty');
+
+async function load(){
+
+  const p = new URLSearchParams();
+  if(from.value) p.set('from',from.value);
+  if(to.value) p.set('to',to.value);
+
+  const res = await apiFetch('/api/records/team/matrix?' + p.toString());
+
+  rows.innerHTML = '';
+  empty.style.display = 'none';
+
+  if(!res.rows || !res.rows.length){
+    empty.style.display = 'block';
+    return;
+  }
+
+  let i = 1;
+
+  res.rows.forEach(r=>{
+    rows.innerHTML += `
+      <tr class="role-${r.role}">
+        <td>${i++}</td>
+        <td>${r.role.toUpperCase()}</td>
+        <td class="user">${r.label}</td>
+        <td><span class="badge">${r.count}</span></td>
+      </tr>
+    `;
+  });
+}
+
+from.onchange = load;
+to.onchange = load;
+apply.onclick = load;
+
+load();
+</script>
+
+</body>
+</html>
