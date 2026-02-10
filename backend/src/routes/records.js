@@ -424,4 +424,81 @@ router.patch('/:id/submit', authRequired, async (req, res) => {
   }
 });
 
+router.get('/team/matrix', authRequired, async (req,res)=>{
+try{
+
+ if(req.user.role!=='zone'){
+   return res.status(403).json({error:'Only Zone'});
+ }
+
+ const {from,to}=req.query;
+
+ const match={
+   status:'submitted'
+ };
+
+ if(from||to){
+   match.createdAt={};
+   if(from) match.createdAt.$gte=new Date(from);
+   if(to) match.createdAt.$lte=new Date(to+'T23:59:59.999Z');
+ }
+
+ // count per user (any role)
+ const recs=await Record.find(match).lean();
+ const counter={};
+
+ recs.forEach(r=>{
+   const id=r.createdBy.emailOrId;
+   if(!id) return;
+   counter[id]=(counter[id]||0)+1;
+ });
+
+ const team=await Team.findOne({}).lean();
+ const rows=[];
+
+ for(const z of team.team||[]){
+   for(const rm of z.rms||[]){
+     const rmu=rm.users?.[0];
+
+     const rmEmail=rmu?.userId||'';
+     rows.push({
+       role:'rm',
+       label:`${z.name} / ${rm.name} : ${rmEmail}`,
+       count:counter[rmEmail]||0
+     });
+
+     for(const sm of rm.sms||[]){
+       const smu=sm.users?.[0];
+       const smEmail=smu?.userId||'';
+
+       rows.push({
+         role:'sm',
+         label:`${z.name} / ${rm.name} / ${sm.name} : ${smEmail}`,
+         count:counter[smEmail]||0
+       });
+
+       for(const se of sm.ses||[]){
+         const seu=se.users?.[0];
+         const seEmail=seu?.userId||'';
+
+         rows.push({
+           role:'se',
+           label:`${z.name} / ${rm.name} / ${sm.name} / ${se.name} : ${seEmail}`,
+           count:counter[seEmail]||0
+         });
+       }
+     }
+   }
+ }
+
+ res.json({rows});
+
+}catch(e){
+ console.error(e);
+ res.status(500).json({error:'Server'});
+}
+});
+
+
 export default router;
+
