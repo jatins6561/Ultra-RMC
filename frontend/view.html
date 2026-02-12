@@ -25,10 +25,19 @@
   td.right{text-align:right}
   .actions{display:flex;justify-content:center;gap:10px;margin:8px 0 20px}
   .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer}
+
   @media (max-width:1280px){.chips{grid-template-columns:repeat(4,1fr)}.cols{grid-template-columns:1fr 1fr}}
   @media (max-width:1024px){.chips{grid-template-columns:repeat(3,1fr)}.cols{grid-template-columns:1fr}table{min-width:680px}}
   @media (max-width:600px){.chips{grid-template-columns:repeat(2,1fr)}}
   @media (max-width:420px){.chips{grid-template-columns:1fr}table{min-width:560px}}
+
+  /* PRINT MODE */
+  @media print{
+    header,.actions{display:none}
+    body{background:white}
+    main{max-width:100%;padding:0}
+    .panel{break-inside:avoid}
+  }
 </style>
 </head>
 <body>
@@ -127,6 +136,7 @@
   </section>
 
   <div class="actions">
+    <button id="printBtn" class="btn">Print Record</button>
     <button id="backBtn" class="btn">Back to Record Page</button>
   </div>
 </main>
@@ -151,7 +161,6 @@ async function load(){
   });
 
   if(res.status===401){
-    // session expired or unauthorized
     sessionStorage.setItem('redirectAfterLogin','view.html?id='+encodeURIComponent(id));
     location.href='login.html';
     return;
@@ -164,7 +173,6 @@ async function load(){
 
   const rec=await res.json();
 
-  // chips
   document.getElementById('chipDate').textContent = new Date(rec.date||rec.createdAt||Date.now()).toLocaleDateString('en-GB');
   document.getElementById('chipPid').textContent  = rec._id || rec.p_id || '';
   document.getElementById('chipProject').textContent = rec.project||'';
@@ -172,7 +180,6 @@ async function load(){
   document.getElementById('chipGrade').textContent   = rec.grade||'';
   document.getElementById('chipPlant').textContent   = rec.plant||'';  
 
-  // materials
   const rmTbody=document.getElementById('rmRows');
   let tMix=0,tCost=0;
   (rec.materials||[]).forEach(m=>{
@@ -188,7 +195,6 @@ async function load(){
   document.getElementById('rmTotalCost').textContent = fmt(tCost);
   document.getElementById('rmF').textContent = fmt(rec.pricing?.C5||0);
 
-  // TM + Contribution
   const tm=rec.tm||{}, c=rec.pricing||{};
   ['L1','L2','L3','L4','L5','L6','L7','L8','L9'].forEach(k=>{
     const el=document.getElementById(k+'v'); if(el) el.textContent=tm[k]??0;
@@ -201,6 +207,10 @@ async function load(){
 document.getElementById('backBtn').addEventListener('click', ()=>{
   if(document.referrer) location.href=document.referrer;
   else location.href='records.html';
+});
+
+document.getElementById('printBtn').addEventListener('click', ()=>{
+  window.print();
 });
 
 load();
