@@ -220,12 +220,7 @@ router.get('/', authRequired, async (req, res) => {
   try {
     const { status, from, to, createdByRole, createdById } = req.query;
 
-const q = {};
-
-// 🔒 Restrict non-admin users to their own records
-if (req.user.role !== 'admin') {
-  q['createdBy.userId'] = req.user.id;
-}
+    const q = {};
     if (status && ['draft', 'submitted'].includes(String(status).toLowerCase())) {
       q.status = String(status).toLowerCase();
     }
@@ -504,7 +499,4 @@ try{
 }
 });
 
-
 export default router;
-
-
