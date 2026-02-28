@@ -67,7 +67,7 @@ requireAuth();
   const dashSub   = document.getElementById('dashSub');
 
   dashTitle.textContent = (roleTitle[role] || 'USER') + ' DASHBOARD';
-  dashSub.textContent   = name ? `${name} · ${email}` : email;
+  dashSub.textContent = email;
 })();
 
 // actions
@@ -79,3 +79,4 @@ teamRecord.onclick    = ()=> location.href='team-records.html';
 </script>
 </body>
 </html>
+
