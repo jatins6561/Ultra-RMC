@@ -224,15 +224,15 @@ async function fetchTeamRecords(){
   if (!role || !userId) return [];
 
   // Ask server to filter…
-  const qs = new URLSearchParams({
-    status: 'submitted',
-    createdByRole: role,
-    createdById: userId
-  });
+const qs = new URLSearchParams({
+  role: role,
+  userId: userId,
+  status: 'submitted'
+});
   if (fromEl.value) qs.append('from', fromEl.value);
   if (toEl.value)   qs.append('to', toEl.value);
 
-  const res = await fetch(`${base}/records?${qs.toString()}`, {
+  const res = await fetch(`${base}/records/by/team?${qs.toString()}`, {
     headers: { 'Authorization': `Bearer ${AUTH.token}` }
   });
   if(!res.ok) throw new Error('Failed to load records');
@@ -299,3 +299,4 @@ document.getElementById('apply').addEventListener('click', render);
 </script>
 </body>
 </html>
+
