@@ -38,6 +38,7 @@
 <header>
   <h1>Team Records</h1>
   <div style="margin-left:auto;display:flex;gap:8px">
+    <button class="btn" onclick="exportExcel()">Export Excel</button>
     <a class="btn" href="javascript:history.back()">Back</a>
     <a class="btn" href="calculator.html">New Calculation</a>
     <button id="logoutBtn" class="btn">Logout</button>
@@ -107,7 +108,8 @@ const noteEl  = q('contextNote');
 const base    = `${API_BASE}/api`;
 q('logoutBtn').onclick = logout;
 
-// Role permissions from the viewer's role
+let currentData = []; // used for Excel export
+
 function allowedRolesFor(role){
   switch(String(role||'').toLowerCase()){
     case 'admin': return ['zone','rm','sm','se'];
@@ -118,7 +120,6 @@ function allowedRolesFor(role){
   }
 }
 
-// Flatten a team tree -> [{role,userId,label}]
 function flattenMembers(scope, node){
   const out = [];
   const pushUser = (role, parentLabels, obj) => {
@@ -178,11 +179,11 @@ async function loadMyTeam(){
     headers: { 'Authorization': `Bearer ${AUTH.token}` }
   });
   if(!res.ok) throw new Error('Failed to load team');
-  return await res.json(); // { scope, root }
+  return await res.json();
 }
 
 let allowedRoles = [];
-let allMembers   = []; // cache: [{role,userId,label}]
+let allMembers   = [];
 
 function refreshUserList(){
   const targetRole = roleSel.value;
@@ -191,9 +192,8 @@ function refreshUserList(){
     userSel.innerHTML = `<option value="" disabled selected>No members under ${targetRole.toUpperCase()}</option>`;
   } else {
     userSel.innerHTML = matches.map(m => `<option value="${m.userId}" data-role="${m.role}">${m.label}</option>`).join('');
-    userSel.selectedIndex = 0; // ensure a value is selected
+    userSel.selectedIndex = 0;
   }
-  
 }
 
 async function initSelectors(){
@@ -205,13 +205,14 @@ async function initSelectors(){
     userSel.innerHTML = `<option value="" disabled selected>No members</option>`;
     return;
   }
+
   roleSel.innerHTML = allowedRoles.map(r=>`<option value="${r}">${r.toUpperCase()}</option>`).join('');
 
   const { scope, root } = await loadMyTeam();
   allMembers = flattenMembers(scope, root).filter(m => allowedRoles.includes(m.role));
 
   refreshUserList();
-  // re-render whenever role or member changes
+
   roleSel.addEventListener('change', () => { refreshUserList(); render(); });
   userSel.addEventListener('change', render);
   fromEl.addEventListener('change', render);
@@ -223,24 +224,26 @@ async function fetchTeamRecords(){
   const userId = (userSel.value || '').trim();
   if (!role || !userId) return [];
 
-  // Ask server to filter…
-const qs = new URLSearchParams({
-  role: role,
-  userId: userId,
-  status: 'submitted'
-});
+  const qs = new URLSearchParams({
+    role: role,
+    userId: userId,
+    status: 'submitted'
+  });
+
   if (fromEl.value) qs.append('from', fromEl.value);
   if (toEl.value)   qs.append('to', toEl.value);
 
   const res = await fetch(`${base}/records/by/team?${qs.toString()}`, {
     headers: { 'Authorization': `Bearer ${AUTH.token}` }
   });
+
   if(!res.ok) throw new Error('Failed to load records');
+
   const data = await res.json();
   const rows = Array.isArray(data.rows) ? data.rows : [];
 
-  // …and ALSO filter on the client to guarantee correctness
   const picked = userId.toLowerCase();
+
   return rows.filter(r => {
     const creator =
       (r?.createdBy?.emailOrId || r?.createdBy?.userId || '')
@@ -254,18 +257,23 @@ const qs = new URLSearchParams({
 async function render(){
   rowsEl.innerHTML = '';
   const data = await fetchTeamRecords();
+  currentData = data;
+
   const selectedUser =
   userSel.options[userSel.selectedIndex]?.textContent || '';
-const selectedRole = roleSel.value?.toUpperCase() || '';
+  const selectedRole = roleSel.value?.toUpperCase() || '';
 
-noteEl.textContent = selectedUser
-  ? `Viewing ${selectedRole} → ${selectedUser} (submitted records)`
-  : '';
+  noteEl.textContent = selectedUser
+    ? `Viewing ${selectedRole} → ${selectedUser} (submitted records)`
+    : '';
+
   q('recCount').textContent = `(${data.length})`;
+
   if (!data.length){
     rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:24px">No records.</td></tr>`;
     return;
   }
+
   for (const r of data){
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -286,6 +294,26 @@ noteEl.textContent = selectedUser
   }
 }
 
+/* -------- Excel Export -------- */
+
+function exportExcel(){
+
+let csv = "Date,ID,Project,Qty,Grade,Plant,Designation,Created By,Net Price,Raw Margin,Contribution,PBDIT\n"
+
+currentData.forEach(r=>{
+csv += `${ddmmyyyy(r.date)},${r._id},${r.project},${r.qty},${r.grade},${r.plant},${r.createdBy?.designation||''},${r.createdBy?.name||''},${fmt2(r.pricing?.C4||0)},${fmt2(r.pricing?.C8||0)},${fmt2(r.pricing?.C9||0)},${fmt2(r.pricing?.C15||0)}\n`
+})
+
+const blob = new Blob([csv], { type: "text/csv" })
+const link = document.createElement("a")
+
+link.href = URL.createObjectURL(blob)
+link.download = "team-records.csv"
+
+link.click()
+
+}
+
 document.getElementById('apply').addEventListener('click', render);
 
 (async function boot(){
@@ -299,4 +327,3 @@ document.getElementById('apply').addEventListener('click', render);
 </script>
 </body>
 </html>
-
