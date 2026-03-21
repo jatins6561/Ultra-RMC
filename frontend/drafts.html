@@ -73,6 +73,7 @@ async function loadDrafts(){
     tbody.innerHTML = `<tr><td colspan="8">No drafts yet</td></tr>`;
     return;
   }
+
   tbody.innerHTML = rows.map(r => `
     <tr>
       <td>${fmtDate(r.createdAt || r.date)}</td>
@@ -84,13 +85,69 @@ async function loadDrafts(){
       <td>${r.createdBy?.designation || ''}</td>
       <td>
         <a class="btn" href="edit.html?id=${r._id}">Edit</a>
+        <button class="btn" data-dup="${r._id}">Duplicate</button>
         <button class="btn danger" data-del="${r._id}">Delete</button>
         <button class="btn primary" data-submit="${r._id}">Submit</button>
       </td>
     </tr>
   `).join('');
 
-  // wire buttons
+  // 🔥 DUPLICATE BUTTON
+  tbody.querySelectorAll('[data-dup]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.getAttribute('data-dup');
+
+      try{
+        // 1. fetch original record
+        const res1 = await fetch(`${API_BASE}/api/records/${id}`, {
+          headers: { 'Authorization': `Bearer ${AUTH.token}` }
+        });
+
+        if(!res1.ok){
+          alert('Failed to fetch record');
+          return;
+        }
+
+        const original = await res1.json();
+
+        // 2. remove unwanted fields
+        delete original._id;
+        delete original.createdAt;
+        delete original.updatedAt;
+        delete original.createdBy;
+
+        // 3. force draft
+        original.status = 'draft';
+
+        // 4. create new record
+        const res2 = await fetch(`${API_BASE}/api/records`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${AUTH.token}`
+          },
+          body: JSON.stringify(original)
+        });
+
+        if(!res2.ok){
+          alert('Duplicate failed');
+          return;
+        }
+
+        const data = await res2.json();
+
+        alert('Draft duplicated!');
+
+        // optional: redirect to edit
+        window.location.href = `edit.html?id=${data.p_id}`;
+
+      }catch(e){
+        alert('Error duplicating');
+      }
+    });
+  });
+
+  // SUBMIT
   tbody.querySelectorAll('[data-submit]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const id = btn.getAttribute('data-submit');
@@ -105,6 +162,7 @@ async function loadDrafts(){
     });
   });
 
+  // DELETE
   tbody.querySelectorAll('[data-del]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const id = btn.getAttribute('data-del');
