@@ -157,6 +157,79 @@ function collectIdsByTarget(root, target /* 'rm'|'sm'|'se' */) {
   return ids;
 }
 
+function getNodeUserId(node) {
+  const u = Array.isArray(node?.users) ? node.users[0] : null;
+  return safeStr(u?.userId);
+}
+
+function collectZoneAnalyticsIds(root, { rmId = '', smId = '', seId = '' } = {}) {
+  const ids = new Set();
+  const zones = Array.isArray(root) ? root : (root ? [root] : []);
+
+  const addId = (node) => {
+    const id = getNodeUserId(node);
+    if (id) ids.add(id);
+  };
+
+  const addSMBranch = (sm) => {
+    addId(sm);
+    for (const se of (sm?.ses || [])) addId(se);
+  };
+
+  const addRMBranch = (rm) => {
+    addId(rm);
+    for (const sm of (rm?.sms || [])) addSMBranch(sm);
+  };
+
+  if (seId) {
+    for (const zone of zones) {
+      for (const rm of (zone.rms || [])) {
+        for (const sm of (rm.sms || [])) {
+          for (const se of (sm.ses || [])) {
+            if (getNodeUserId(se) === seId) {
+              addId(se);
+              return [...ids];
+            }
+          }
+        }
+      }
+    }
+    return [];
+  }
+
+  if (smId) {
+    for (const zone of zones) {
+      for (const rm of (zone.rms || [])) {
+        for (const sm of (rm.sms || [])) {
+          if (getNodeUserId(sm) === smId) {
+            addSMBranch(sm);
+            return [...ids];
+          }
+        }
+      }
+    }
+    return [];
+  }
+
+  if (rmId) {
+    for (const zone of zones) {
+      for (const rm of (zone.rms || [])) {
+        if (getNodeUserId(rm) === rmId) {
+          addRMBranch(rm);
+          return [...ids];
+        }
+      }
+    }
+    return [];
+  }
+
+  for (const zone of zones) {
+    for (const rm of (zone.rms || [])) addRMBranch(rm);
+  }
+
+  return [...ids];
+}
+
 /* ------------------------------ create ----------------------------- */
 /**
  * POST /api/records
@@ -346,6 +419,67 @@ router.get('/by/team', authRequired, async (req, res) => {
   }
 });
 
+/* -------------------------- zone team analytics ------------------- */
+/**
+ * GET /api/records/team-analytics
+ * Query params:
+ *   rmId=<team user id> (optional)
+ *   smId=<team user id> (optional)
+ *   seId=<team user id> (optional)
+ *   status=draft|submitted (optional)
+ *   from=YYYY-MM-DD, to=YYYY-MM-DD (optional)
+ */
+router.get('/team-analytics', authRequired, async (req, res) => {
+  try {
+    const role = (req.user.role || '').toLowerCase();
+    if (!['admin', 'zone'].includes(role)) {
+      return res.status(403).json({ error: 'Only admin or zone can access team analytics' });
+    }
+
+    const rmId = safeStr(req.query.rmId || '');
+    const smId = safeStr(req.query.smId || '');
+    const seId = safeStr(req.query.seId || '');
+    const { status, from, to } = req.query;
+
+    let teamDoc = null;
+    if (role === 'admin') {
+      teamDoc = await Team.findOne({ ownerUserId: req.user.id }).lean();
+      if (!teamDoc) teamDoc = await Team.findOne({}).lean();
+    } else {
+      teamDoc = await Team.findOne({}).lean();
+    }
+
+    if (!teamDoc) return res.json({ rows: [], ids: [] });
+
+    const emailOrId = req.user.email || req.user.emailOrId || '';
+    const subtree = extractSubtreeForUser(teamDoc, role, emailOrId) || { root: null };
+    const ids = collectZoneAnalyticsIds(subtree.root, { rmId, smId, seId });
+
+    if (ids.length === 0) {
+      return res.json({ rows: [], ids: [] });
+    }
+
+    const q = {
+      'createdBy.emailOrId': { $in: ids },
+    };
+
+    if (status && ['draft', 'submitted'].includes(String(status).toLowerCase())) {
+      q.status = String(status).toLowerCase();
+    }
+    if (from || to) {
+      q.date = {};
+      if (from) q.date.$gte = new Date(from);
+      if (to) q.date.$lte = new Date(to + 'T23:59:59.999Z');
+    }
+
+    const rows = await Record.find(q).sort({ createdAt: -1 }).lean();
+    return res.json({ rows, ids });
+  } catch (err) {
+    console.error('team analytics error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /* ------------------------------ get one --------------------------- */
 /**
  * GET /api/records/:id
@@ -503,6 +637,8 @@ try{
  res.status(500).json({error:'Server'});
 }
 });
+
+
 
 export default router;
 
