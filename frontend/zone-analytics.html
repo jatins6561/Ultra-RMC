@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Team Analytics</title>
+<style>
+  :root{--bg:#f3f4f6;--card:#ffffff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#3b82f6;--accent-2:#1d4ed8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:18px;font-weight:800}
+  main{max-width:1280px;margin:0 auto;padding:16px}
+  .filters{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin:10px 0 16px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  label{font-size:12px;color:var(--muted)}
+  select,input[type=date]{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;font-size:12px}
+  select:disabled,input[type=date]:disabled{background:#f9fafb;color:#9ca3af}
+  .btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));border-color:var(--accent-2);color:#fff}
+  .btn.secondary{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .card h2{margin:0;font-size:13px;font-weight:800;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
+  .graph-card{margin-bottom:16px}
+  .graph-wrap{padding:12px}
+  .graph-meta{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .graph-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f8fafc;border:1px solid var(--line);color:#334155}
+  .swatch{width:10px;height:10px;border-radius:999px;display:inline-block}
+  .graph-scroll{overflow:auto}
+  .graph-svg{display:block;width:100%;min-width:820px;height:400px}
+  .graph-empty{padding:28px 12px;text-align:center;color:var(--muted);font-size:12px}
+  .table-wrap{max-height:62vh;overflow:auto}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:12px}
+  th{position:sticky;top:0;background:#f1f5f9;text-align:left}
+  td.right{text-align:right}
+  td a{color:#3b82f6;text-decoration:none;font-weight:700}
+  .muted{color:var(--muted)}
+  @media (max-width:980px){
+    main{padding:10px}
+    .filters{grid-template-columns:1fr 1fr}
+    .table-wrap{max-height:none}
+    table{min-width:980px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Team Analytics</h1>
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <button class="btn" onclick="exportExcel()">Export Excel</button>
+    <a class="btn" href="javascript:history.back()">Back</a>
+    <button id="logoutBtn" class="btn">Logout</button>
+  </div>
+</header>
+
+<main>
+  <section class="filters card" style="padding:12px">
+    <div class="field">
+      <label>Regional Head Team</label>
+      <select id="rmSel"></select>
+    </div>
+    <div class="field">
+      <label>SM Head Team</label>
+      <select id="smSel"></select>
+    </div>
+    <div class="field">
+      <label>SE Team</label>
+      <select id="seSel"></select>
+    </div>
+    <div class="field"><label>From</label><input id="fromDate" type="date"/></div>
+    <div class="field"><label>To</label><input id="toDate" type="date"/></div>
+    <div class="field"><label>Contribution >=</label><input id="contribMin" type="number" step="0.01" placeholder="Min contribution"/></div>
+    <div class="field"><label>Contribution <=</label><input id="contribMax" type="number" step="0.01" placeholder="Max contribution"/></div>
+    <button id="apply" class="btn primary">Apply</button>
+    <button id="loadT1" class="btn secondary">Load T1</button>
+    <button id="loadT2" class="btn secondary">Load T2</button>
+  </section>
+
+  <section class="card graph-card">
+    <h2>Contribution Graph <span id="graphCount" class="muted" style="margin-left:8px"></span></h2>
+    <div class="graph-wrap">
+      <div class="graph-toolbar">
+        <button id="renderCompare" class="btn secondary">Render Compare</button>
+        <button id="clearCompare" class="btn">Clear Graph</button>
+      </div>
+      <div id="graphMeta" class="graph-meta">Load graph to plot filtered records by date and contribution.</div>
+      <div class="graph-scroll">
+        <div id="graphContainer" class="graph-empty">No graph loaded.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>
+      Records
+      <span id="recCount" style="font-weight:700;color:#1d4ed8;margin-left:6px"></span>
+      <span id="contextNote" class="muted" style="margin-left:8px"></span>
+    </h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:110px">Date</th>
+            <th style="width:120px">ID</th>
+            <th>Project</th>
+            <th style="width:90px">Qty</th>
+            <th style="width:80px">Grade</th>
+            <th style="width:120px">Plant</th>
+            <th style="width:120px">Designation</th>
+            <th style="width:140px">Created By</th>
+            <th style="width:100px">Net Price</th>
+            <th style="width:110px">Raw Margin</th>
+            <th style="width:110px">Contribution</th>
+            <th style="width:90px">PBDIT</th>
+            <th style="width:80px">View</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="auth.js"></script>
+<script>
+requireAuth();
+
+const q = id => document.getElementById(id);
+const ddmmyyyy = iso => { const d=new Date(iso); const dd=String(d.getDate()).padStart(2,'0'); const mm=String(d.getMonth()+1).padStart(2,'0'); const yy=d.getFullYear(); return `${dd}.${mm}.${yy}`; };
+const fmt2 = n => Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+const rmSel = q('rmSel');
+const smSel = q('smSel');
+const seSel = q('seSel');
+const fromEl = q('fromDate');
+const toEl = q('toDate');
+const contribMinEl = q('contribMin');
+const contribMaxEl = q('contribMax');
+const rowsEl = q('rows');
+const noteEl = q('contextNote');
+const graphContainerEl = q('graphContainer');
+const graphMetaEl = q('graphMeta');
+const graphCountEl = q('graphCount');
+q('logoutBtn').onclick = logout;
+
+let currentData = [];
+let teamFilters = { rms: [] };
+let selectedFilters = { rmId: '', smId: '', seId: '', from: '', to: '', contribMin: '', contribMax: '' };
+let compareState = { t1: null, t2: null };
+
+function getUserId(node){
+  return (node?.users?.[0]?.userId || '').trim();
+}
+
+function makeOption(value, label){
+  return `<option value="${value}">${label}</option>`;
+}
+
+function escapeHtml(value){
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderAllOption(selectEl){
+  selectEl.innerHTML = makeOption('', 'ALL');
+  selectEl.value = '';
+}
+
+function displayTeamLabel(name, userId){
+  const cleanName = (name || '').trim();
+  const cleanId = (userId || '').trim();
+  if (cleanName && cleanId && cleanName.toLowerCase() !== cleanId.toLowerCase()) {
+    return `${cleanName} (${cleanId})`;
+  }
+  return cleanName || cleanId || 'Unnamed';
+}
+
+function buildDynamicFilters(root){
+  const zones = Array.isArray(root) ? root : (root ? [root] : []);
+  const rms = [];
+
+  zones.forEach((zone, zoneIndex) => {
+    (zone.rms || []).forEach(rm => {
+      const rmId = getUserId(rm);
+      if (!rmId) return;
+
+      const sms = (rm.sms || []).map(sm => {
+        const smId = getUserId(sm);
+        if (!smId) return null;
+
+        const ses = (sm.ses || []).map(se => {
+          const seId = getUserId(se);
+          if (!seId) return null;
+
+          return {
+            id: seId,
+            name: se.name || seId,
+            label: displayTeamLabel(se.name, seId),
+            parentSmId: smId,
+            parentRmId: rmId
+          };
+        }).filter(Boolean);
+
+        return {
+          id: smId,
+          name: sm.name || smId,
+          label: displayTeamLabel(sm.name, smId),
+          parentRmId: rmId,
+          ses
+        };
+      }).filter(Boolean);
+
+      rms.push({
+        id: rmId,
+        name: rm.name || rmId,
+        label: displayTeamLabel(rm.name, rmId),
+        zoneName: zone.name || `Zone ${zoneIndex + 1}`,
+        sms
+      });
+    });
+  });
+
+  return { rms };
+}
+
+function getSelectedRM(){
+  return teamFilters.rms.find(item => item.id === rmSel.value) || null;
+}
+
+function getSelectedSM(){
+  const rm = getSelectedRM();
+  return rm?.sms.find(item => item.id === smSel.value) || null;
+}
+
+function getAllScopedIds(){
+  const ids = new Set();
+  const add = (id) => {
+    const clean = String(id || '').trim();
+    if (clean) ids.add(clean);
+  };
+
+  teamFilters.rms.forEach(rm => {
+    add(rm.id);
+    (rm.sms || []).forEach(sm => {
+      add(sm.id);
+      (sm.ses || []).forEach(se => add(se.id));
+    });
+  });
+
+  return [...ids];
+}
+
+function getSelectedScopeIds(){
+  const ids = new Set();
+  const add = (id) => {
+    const clean = String(id || '').trim();
+    if (clean) ids.add(clean);
+  };
+
+  if (!rmSel.value) {
+    return getAllScopedIds();
+  }
+
+  const rm = getSelectedRM();
+  if (!rm) return [];
+
+  if (seSel.value) {
+    add(seSel.value);
+    return [...ids];
+  }
+
+  if (smSel.value) {
+    const sm = getSelectedSM();
+    if (!sm) return [];
+    add(sm.id);
+    (sm.ses || []).forEach(se => add(se.id));
+    return [...ids];
+  }
+
+  add(rm.id);
+  (rm.sms || []).forEach(sm => {
+    add(sm.id);
+    (sm.ses || []).forEach(se => add(se.id));
+  });
+  return [...ids];
+}
+
+function fillRMOptions(){
+  rmSel.innerHTML = makeOption('', 'ALL') + teamFilters.rms.map(rm => makeOption(escapeHtml(rm.id), escapeHtml(rm.label))).join('');
+  rmSel.value = '';
+}
+
+function fillSMOptions(){
+  if (!rmSel.value){
+    renderAllOption(smSel);
+    smSel.disabled = true;
+    renderAllOption(seSel);
+    seSel.disabled = true;
+    return;
+  }
+
+  const rm = getSelectedRM();
+  const sms = rm?.sms || [];
+  smSel.innerHTML = makeOption('', 'ALL') + sms.map(sm => makeOption(escapeHtml(sm.id), escapeHtml(sm.label))).join('');
+  smSel.disabled = false;
+  if (![...smSel.options].some(opt => opt.value === smSel.value)) smSel.value = '';
+  fillSEOptions();
+}
+
+function fillSEOptions(){
+  if (!rmSel.value){
+    renderAllOption(seSel);
+    seSel.disabled = true;
+    return;
+  }
+
+  const rm = getSelectedRM();
+  const sms = rm?.sms || [];
+  const ses = smSel.value
+    ? (getSelectedSM()?.ses || [])
+    : sms.flatMap(sm => sm.ses || []);
+
+  seSel.innerHTML = makeOption('', 'ALL') + ses.map(se => makeOption(escapeHtml(se.id), escapeHtml(se.label))).join('');
+  seSel.disabled = false;
+  if (![...seSel.options].some(opt => opt.value === seSel.value)) seSel.value = '';
+}
+
+function getContributionNote(){
+  const min = String(selectedFilters.contribMin || '').trim();
+  const max = String(selectedFilters.contribMax || '').trim();
+  if (min && max) return ` with contribution between ${min} and ${max}`;
+  if (min) return ` with contribution >= ${min}`;
+  if (max) return ` with contribution <= ${max}`;
+  return '';
+}
+
+function getSelectionNote(){
+  const contributionNote = getContributionNote();
+  if (!rmSel.value) return `Viewing all submitted records for this zone team${contributionNote}`;
+  const rmText = rmSel.options[rmSel.selectedIndex]?.textContent || rmSel.value;
+  if (seSel.value) {
+    const seText = seSel.options[seSel.selectedIndex]?.textContent || seSel.value;
+    return `Viewing SE ${seText} under RM ${rmText}${contributionNote}`;
+  }
+  if (smSel.value) {
+    const smText = smSel.options[smSel.selectedIndex]?.textContent || smSel.value;
+    return `Viewing SM ${smText} and all SE records under RM ${rmText}${contributionNote}`;
+  }
+  return `Viewing RM ${rmText} with all SM and SE records under it${contributionNote}`;
+}
+
+function getFilterState(){
+  return {
+    rmId: rmSel.value || '',
+    smId: smSel.disabled ? '' : (smSel.value || ''),
+    seId: seSel.disabled ? '' : (seSel.value || ''),
+    from: fromEl.value || '',
+    to: toEl.value || '',
+    contribMin: contribMinEl.value || '',
+    contribMax: contribMaxEl.value || ''
+  };
+}
+
+function parseNumericInput(value){
+  if (value === '' || value === null || value === undefined) return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function fmtAxisDate(iso){
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}`;
+}
+
+function escapeAttr(value){
+  return escapeHtml(value).replace(/`/g, '&#96;');
+}
+
+function getSeriesPoints(records, seriesLabel){
+  return (records || [])
+    .map(r => ({
+      rawDate: r.date,
+      time: new Date(r.date).getTime(),
+      contribution: Number(r?.pricing?.C9 ?? 0),
+      label: `${seriesLabel} | ${ddmmyyyy(r.date)} | Contribution: ${fmt2(Number(r?.pricing?.C9 ?? 0))} | ${r?.createdBy?.name || r?.createdBy?.emailOrId || ''}`
+    }))
+    .filter(p => Number.isFinite(p.time))
+    .sort((a, b) => a.time - b.time);
+}
+
+function getFiltersSummary(filters){
+  if (!filters) return '';
+  const parts = [];
+  if (filters.from || filters.to) parts.push(`${filters.from || 'start'} to ${filters.to || 'end'}`);
+  if (filters.contribMin || filters.contribMax) parts.push(`Contribution ${filters.contribMin || '-inf'} to ${filters.contribMax || '+inf'}`);
+  if (filters.rmId) parts.push(`RM ${filters.rmId}`);
+  if (filters.smId) parts.push(`SM ${filters.smId}`);
+  if (filters.seId) parts.push(`SE ${filters.seId}`);
+  return parts.join(' | ');
+}
+
+function clearGraph(){
+  graphCountEl.textContent = '';
+  graphMetaEl.textContent = 'Load graph to plot filtered records by date and contribution.';
+  graphContainerEl.className = 'graph-empty';
+  graphContainerEl.innerHTML = 'No graph loaded.';
+}
+
+function renderGraph(seriesList){
+  const activeSeries = (Array.isArray(seriesList) ? seriesList : [])
+    .filter(series => series && Array.isArray(series.records) && series.records.length);
+  const totalPoints = activeSeries.reduce((sum, series) => sum + series.records.length, 0);
+
+  graphCountEl.textContent = totalPoints ? `(${totalPoints})` : '';
+
+  if (!activeSeries.length){
+    graphMetaEl.textContent = 'No filtered records available to plot.';
+    graphContainerEl.className = 'graph-empty';
+    graphContainerEl.innerHTML = 'No graph data for the selected filters.';
+    return;
+  }
+
+  const enrichedSeries = activeSeries.map(series => ({
+    ...series,
+    points: getSeriesPoints(series.records, series.label)
+  })).filter(series => series.points.length);
+
+  const allPoints = enrichedSeries.flatMap(series => series.points);
+
+  if (!allPoints.length){
+    graphMetaEl.textContent = 'No valid dated records available to plot.';
+    graphContainerEl.className = 'graph-empty';
+    graphContainerEl.innerHTML = 'No graph data for the selected filters.';
+    return;
+  }
+
+  const width = Math.max(860, allPoints.length * 52);
+  const height = 380;
+  const pad = { top: 24, right: 24, bottom: 108, left: 64 };
+  const chartW = width - pad.left - pad.right;
+  const chartH = height - pad.top - pad.bottom;
+
+  const minTime = Math.min(...allPoints.map(p => p.time));
+  const maxTime = Math.max(...allPoints.map(p => p.time));
+  const minContribution = Math.min(...allPoints.map(p => p.contribution));
+  const maxContribution = Math.max(...allPoints.map(p => p.contribution));
+  const contribSpan = maxContribution - minContribution;
+  const yMin = Math.max(0, minContribution - (contribSpan === 0 ? Math.max(1, minContribution * 0.1 || 10) : contribSpan * 0.15));
+  const yMax = maxContribution + (contribSpan === 0 ? Math.max(1, maxContribution * 0.1 || 10) : contribSpan * 0.15);
+  const timeSpan = Math.max(1, maxTime - minTime);
+  const ySpan = Math.max(1, yMax - yMin);
+
+  const xFor = time => pad.left + ((time - minTime) / timeSpan) * chartW;
+  const yFor = value => pad.top + chartH - ((value - yMin) / ySpan) * chartH;
+
+  const yTicks = 5;
+  const sortedTicks = [...allPoints].sort((a, b) => a.time - b.time);
+  const xStep = Math.max(1, Math.ceil(sortedTicks.length / 8));
+
+  const gridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
+    const value = yMin + (ySpan * i / yTicks);
+    const y = yFor(value);
+    return `
+      <line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="#e5e7eb" stroke-width="1" />
+      <text x="${pad.left - 10}" y="${y + 4}" text-anchor="end" font-size="11" fill="#6b7280">${fmt2(value)}</text>
+    `;
+  }).join('');
+
+  const xTicks = sortedTicks.map((p, idx) => ({ p, idx }))
+    .filter(({ idx }) => idx % xStep === 0 || idx === sortedTicks.length - 1)
+    .map(({ p }) => {
+      const x = xFor(p.time);
+      return `
+        <line x1="${x}" y1="${pad.top + chartH}" x2="${x}" y2="${pad.top + chartH + 6}" stroke="#94a3b8" stroke-width="1" />
+        <text x="${x}" y="${pad.top + chartH + 18}" text-anchor="end" font-size="11" fill="#6b7280" transform="rotate(-90 ${x} ${pad.top + chartH + 18})">${escapeHtml(fmtAxisDate(p.rawDate))}</text>
+      `;
+    }).join('');
+  const legend = enrichedSeries.map(series => `
+    <span class="pill"><span class="swatch" style="background:${series.color}"></span>${escapeHtml(series.label)}${series.filters ? `: ${escapeHtml(getFiltersSummary(series.filters))}` : ''}</span>
+  `).join('');
+  const seriesMarkup = enrichedSeries.map(series => {
+    const polyline = series.points.map(p => `${xFor(p.time)},${yFor(p.contribution)}`).join(' ');
+    const circles = series.points.map(p => {
+      const x = xFor(p.time);
+      const y = yFor(p.contribution);
+      return `
+        <circle cx="${x}" cy="${y}" r="4" fill="${series.color}">
+          <title>${escapeAttr(p.label)}</title>
+        </circle>
+        <circle cx="${x}" cy="${y}" r="12" fill="transparent">
+          <title>${escapeAttr(`${series.label} | ${ddmmyyyy(p.rawDate)} | Contribution: ${fmt2(p.contribution)}`)}</title>
+        </circle>
+      `;
+    }).join('');
+    return `
+      <polyline fill="none" stroke="${series.color}" stroke-width="2.5" points="${polyline}" />
+      ${circles}
+    `;
+  }).join('');
+
+  graphMetaEl.innerHTML = `X-axis: Date | Y-axis: Contribution | Points: ${totalPoints}<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${legend}</div>`;
+  graphContainerEl.className = '';
+  graphContainerEl.innerHTML = `
+    <svg class="graph-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Contribution graph">
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>
+      ${gridLines}
+      <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartH}" stroke="#94a3b8" stroke-width="1.2" />
+      <line x1="${pad.left}" y1="${pad.top + chartH}" x2="${width - pad.right}" y2="${pad.top + chartH}" stroke="#94a3b8" stroke-width="1.2" />
+      ${xTicks}
+      ${seriesMarkup}
+      <text x="${width / 2}" y="${height - 2}" text-anchor="middle" font-size="12" fill="#475569">Date</text>
+      <text x="18" y="${height / 2}" text-anchor="middle" font-size="12" fill="#475569" transform="rotate(-90 18 ${height / 2})">Contribution</text>
+    </svg>
+  `;
+}
+
+function buildGraphSeries(){
+  const series = [];
+  if (compareState.t1?.records?.length) {
+    series.push({
+      label: 'T1',
+      color: '#2563eb',
+      records: compareState.t1.records,
+      filters: compareState.t1.filters
+    });
+  }
+  if (compareState.t2?.records?.length) {
+    series.push({
+      label: 'T2',
+      color: '#dc2626',
+      records: compareState.t2.records,
+      filters: compareState.t2.filters
+    });
+  }
+  return series;
+}
+
+function snapshotCurrentFilters(){
+  return { ...selectedFilters };
+}
+
+function loadSeries(slot){
+  if (!currentData.length) {
+    graphMetaEl.textContent = `No filtered records available to load into ${slot.toUpperCase()}.`;
+    graphContainerEl.className = 'graph-empty';
+    graphContainerEl.innerHTML = 'Apply filters that return records, then load T1 or T2.';
+    return;
+  }
+
+  compareState[slot] = {
+    filters: snapshotCurrentFilters(),
+    records: currentData.map(r => ({ ...r }))
+  };
+  renderGraph(buildGraphSeries());
+}
+
+function syncSelectedFilters(){
+  selectedFilters = getFilterState();
+  noteEl.textContent = getSelectionNote();
+}
+
+async function loadMyTeam(){
+  return await apiFetch('/api/admin/my-team');
+}
+
+async function fetchAnalyticsRecords(filters){
+  const qs = new URLSearchParams({ status: 'submitted' });
+  if (filters.from) qs.append('from', filters.from);
+  if (filters.to) qs.append('to', filters.to);
+
+  const data = await apiFetch(`/api/records/team-analytics?${qs.toString()}`);
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const allowedIds = new Set(getSelectedScopeIds().map(id => id.toLowerCase()));
+  const contribMin = parseNumericInput(filters.contribMin);
+  const contribMax = parseNumericInput(filters.contribMax);
+
+  return rows.filter(r => {
+    const creator = String(r?.createdBy?.emailOrId || r?.createdBy?.userId || '').trim().toLowerCase();
+    if (!creator || !allowedIds.has(creator)) return false;
+    const contribution = Number(r?.pricing?.C9 ?? 0);
+    if (contribMin !== null && contribution < contribMin) return false;
+    if (contribMax !== null && contribution > contribMax) return false;
+    return true;
+  });
+}
+
+async function render(){
+  const filters = { ...selectedFilters };
+  rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:24px">Loading records...</td></tr>`;
+  noteEl.textContent = getSelectionNote();
+
+  try{
+    const data = await fetchAnalyticsRecords(filters);
+    currentData = data;
+    q('recCount').textContent = `(${data.length})`;
+
+    if (!data.length){
+      rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:24px">No records.</td></tr>`;
+      return;
+    }
+
+    rowsEl.innerHTML = '';
+    data.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ddmmyyyy(r.date)}</td>
+        <td>${r._id || r.p_id || ''}</td>
+        <td>${r.project || ''}</td>
+        <td class="right">${r.qty || 0}</td>
+        <td>${r.grade || ''}</td>
+        <td>${r.plant || ''}</td>
+        <td>${(r.createdBy && r.createdBy.designation) ? r.createdBy.designation : ''}</td>
+        <td>${(r.createdBy && (r.createdBy.name || r.createdBy.emailOrId)) ? (r.createdBy.name || r.createdBy.emailOrId) : ''}</td>
+        <td class="right">${fmt2(r.pricing?.C4 || 0)}</td>
+        <td class="right">${fmt2(r.pricing?.C8 || 0)}</td>
+        <td class="right">${fmt2(r.pricing?.C9 || 0)}</td>
+        <td class="right">${fmt2(r.pricing?.C15 || 0)}</td>
+        <td><a href="view.html?id=${encodeURIComponent(r._id || r.p_id)}">VIEW</a></td>`;
+      rowsEl.appendChild(tr);
+    });
+  }catch(err){
+    console.error(err);
+    currentData = [];
+    q('recCount').textContent = '';
+    rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#b91c1c;padding:24px">${err.message || 'Failed to load records.'}</td></tr>`;
+  }
+}
+
+function exportExcel(){
+  let csv = 'Date,ID,Project,Qty,Grade,Plant,Designation,Created By,Net Price,Raw Margin,Contribution,PBDIT\n';
+
+  currentData.forEach(r => {
+    csv += `${ddmmyyyy(r.date)},${r._id || ''},${r.project || ''},${r.qty || 0},${r.grade || ''},${r.plant || ''},${r.createdBy?.designation || ''},${r.createdBy?.name || r.createdBy?.emailOrId || ''},${fmt2(r.pricing?.C4 || 0)},${fmt2(r.pricing?.C8 || 0)},${fmt2(r.pricing?.C9 || 0)},${fmt2(r.pricing?.C15 || 0)}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'team-analytics.csv';
+  link.click();
+}
+
+async function boot(){
+  try{
+    const { scope, root } = await loadMyTeam();
+    if (!root || !['zone', 'admin'].includes((scope || '').toLowerCase())) {
+      throw new Error('Team analytics is available only for zone access');
+    }
+
+    teamFilters = buildDynamicFilters(root);
+    fillRMOptions();
+    fillSMOptions();
+    syncSelectedFilters();
+    await render();
+  }catch(err){
+    console.error(err);
+    rowsEl.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#b91c1c;padding:24px">${err.message || 'Failed to load team analytics.'}</td></tr>`;
+    noteEl.textContent = '';
+    q('recCount').textContent = '';
+  }
+}
+
+rmSel.addEventListener('change', () => {
+  smSel.value = '';
+  seSel.value = '';
+  fillSMOptions();
+  syncSelectedFilters();
+  render();
+});
+
+smSel.addEventListener('change', () => {
+  seSel.value = '';
+  fillSEOptions();
+  syncSelectedFilters();
+  render();
+});
+
+seSel.addEventListener('change', () => {
+  syncSelectedFilters();
+  render();
+});
+
+fromEl.addEventListener('change', () => {
+  syncSelectedFilters();
+  render();
+});
+
+toEl.addEventListener('change', () => {
+  syncSelectedFilters();
+  render();
+});
+
+contribMinEl.addEventListener('input', () => {
+  syncSelectedFilters();
+  render();
+});
+
+contribMaxEl.addEventListener('input', () => {
+  syncSelectedFilters();
+  render();
+});
+
+q('apply').addEventListener('click', () => {
+  syncSelectedFilters();
+  render();
+});
+
+q('loadT1').addEventListener('click', () => {
+  loadSeries('t1');
+});
+
+q('loadT2').addEventListener('click', () => {
+  loadSeries('t2');
+});
+
+q('renderCompare').addEventListener('click', () => {
+  renderGraph(buildGraphSeries());
+});
+
+q('clearCompare').addEventListener('click', () => {
+  compareState = { t1: null, t2: null };
+  clearGraph();
+});
+
+boot();
+</script>
+</body>
+</html>
