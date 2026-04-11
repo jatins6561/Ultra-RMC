@@ -33,15 +33,25 @@
   .graph-toolbar .field{min-width:180px}
   .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#f8fafc;border:1px solid var(--line);color:#334155}
   .swatch{width:10px;height:10px;border-radius:999px;display:inline-block}
-  .graph-scroll{overflow:auto}
+  .graph-scroll{overflow:auto;padding-bottom:8px}
+  .graph-scroll::-webkit-scrollbar{height:12px}
+  .graph-scroll::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:999px}
+  .graph-scroll::-webkit-scrollbar-track{background:#e5e7eb;border-radius:999px}
   .graph-svg{display:block;width:100%;min-width:820px;height:400px}
   .graph-empty{padding:28px 12px;text-align:center;color:var(--muted);font-size:12px}
+  .graph-click{cursor:zoom-in}
   .stats-card{border:1px solid var(--line);border-radius:14px;background:#fbfdff;padding:12px}
   .stats-title{font-size:12px;font-weight:800;color:#1f2937;margin-bottom:10px}
   .stats-grid{display:grid;grid-template-columns:1fr;gap:10px}
   .stat-item{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
   .stat-label{font-size:11px;color:var(--muted);margin-bottom:4px}
   .stat-value{font-size:18px;font-weight:800;color:#111827}
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:24px;z-index:20}
+  .modal.open{display:flex}
+  .modal-card{width:min(1200px,96vw);max-height:92vh;background:#fff;border-radius:18px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(15,23,42,.22);overflow:hidden;display:flex;flex-direction:column}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .modal-body{padding:12px;overflow:auto}
+  .modal-graph{min-width:1100px}
   .table-wrap{max-height:62vh;overflow:auto}
   table{width:100%;border-collapse:separate;border-spacing:0}
   th,td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:12px}
@@ -115,11 +125,12 @@
               </select>
             </div>
             <button id="renderCompare" class="btn secondary">Render Compare</button>
+            <button id="expandGraph" class="btn secondary">Expand Graph</button>
             <button id="clearCompare" class="btn">Clear Graph</button>
           </div>
           <div id="graphMeta" class="graph-meta">Load graph to plot filtered records by date and contribution.</div>
           <div class="graph-scroll">
-            <div id="graphContainer" class="graph-empty">No graph loaded.</div>
+            <div id="graphContainer" class="graph-empty graph-click">No graph loaded.</div>
           </div>
         </div>
         <aside class="stats-card">
@@ -179,6 +190,21 @@
   </section>
 </main>
 
+<div id="graphModal" class="modal" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head">
+      <strong>Expanded Contribution Graph</strong>
+      <button id="closeGraphModal" class="btn">Close</button>
+    </div>
+    <div class="modal-body">
+      <div id="graphModalMeta" class="graph-meta"></div>
+      <div class="graph-scroll">
+        <div id="graphModalContainer" class="graph-empty modal-graph">No graph loaded.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="auth.js"></script>
 <script>
 requireAuth();
@@ -199,6 +225,9 @@ const graphContainerEl = q('graphContainer');
 const graphMetaEl = q('graphMeta');
 const graphCountEl = q('graphCount');
 const graphModeEl = q('graphMode');
+const graphModalEl = q('graphModal');
+const graphModalMetaEl = q('graphModalMeta');
+const graphModalContainerEl = q('graphModalContainer');
 const periodLabelEl = q('periodLabel');
 const avgContributionEl = q('avgContribution');
 const minContributionEl = q('minContribution');
@@ -211,6 +240,8 @@ let teamFilters = { rms: [] };
 let selectedFilters = { rmId: '', smId: '', seId: '', from: '', to: '', contribMin: '', contribMax: '' };
 let compareState = { t1: null, t2: null };
 let graphMode = 'raw';
+let lastGraphMarkup = '';
+let lastGraphMeta = 'Load graph to plot filtered records by date and contribution.';
 
 function getUserId(node){
   return (node?.users?.[0]?.userId || '').trim();
@@ -565,6 +596,11 @@ function clearGraph(){
   graphMetaEl.textContent = 'Load graph to plot filtered records by date and contribution.';
   graphContainerEl.className = 'graph-empty';
   graphContainerEl.innerHTML = 'No graph loaded.';
+  lastGraphMarkup = '';
+  lastGraphMeta = 'Load graph to plot filtered records by date and contribution.';
+  graphModalMetaEl.textContent = lastGraphMeta;
+  graphModalContainerEl.className = 'graph-empty modal-graph';
+  graphModalContainerEl.innerHTML = 'No graph loaded.';
   updatePeriodSummary([], selectedFilters);
 }
 
@@ -616,34 +652,43 @@ function renderGraph(seriesList){
   const yFor = value => pad.top + chartH - ((value - yMin) / ySpan) * chartH;
 
   const yTicks = 5;
-  const sortedTicks = [...allPoints].sort((a, b) => a.time - b.time);
-  const xStep = Math.max(1, Math.ceil(sortedTicks.length / 8));
+  const overlayTimeline = enrichedSeries.length > 1;
+  const xSourcePoints = overlayTimeline
+    ? Array.from({ length: Math.max(...enrichedSeries.map(series => series.points.length)) }, (_, idx) => ({ index: idx }))
+    : [...allPoints].sort((a, b) => a.time - b.time);
+  const xStep = Math.max(1, Math.ceil(xSourcePoints.length / 8));
+  const xForPoint = (point, idx, total) => {
+    if (!overlayTimeline) return xFor(point.time);
+    const denom = Math.max(1, total - 1);
+    return pad.left + (idx / denom) * chartW;
+  };
 
   const gridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
     const value = yMin + (ySpan * i / yTicks);
     const y = yFor(value);
     return `
       <line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="#e5e7eb" stroke-width="1" />
-      <text x="${pad.left - 10}" y="${y + 4}" text-anchor="end" font-size="11" fill="#6b7280">${fmt2(value)}</text>
+      <text x="${pad.left - 10}" y="${y + 4}" text-anchor="end" font-size="11" font-weight="700" fill="#0f172a">${fmt2(value)}</text>
     `;
   }).join('');
 
-  const xTicks = sortedTicks.map((p, idx) => ({ p, idx }))
-    .filter(({ idx }) => idx % xStep === 0 || idx === sortedTicks.length - 1)
-    .map(({ p }) => {
-      const x = xFor(p.time);
+  const xTicks = xSourcePoints.map((p, idx) => ({ p, idx }))
+    .filter(({ idx }) => idx % xStep === 0 || idx === xSourcePoints.length - 1)
+    .map(({ p, idx }) => {
+      const x = overlayTimeline ? xForPoint(null, idx, xSourcePoints.length) : xFor(p.time);
+      const tickLabel = overlayTimeline ? `P${idx + 1}` : formatGraphTickDate(p.rawDate);
       return `
-        <line x1="${x}" y1="${pad.top + chartH}" x2="${x}" y2="${pad.top + chartH + 6}" stroke="#94a3b8" stroke-width="1" />
-        <text x="${x}" y="${pad.top + chartH + 18}" text-anchor="end" font-size="11" fill="#6b7280" transform="rotate(-90 ${x} ${pad.top + chartH + 18})">${escapeHtml(formatGraphTickDate(p.rawDate))}</text>
+        <line x1="${x}" y1="${pad.top + chartH}" x2="${x}" y2="${pad.top + chartH + 6}" stroke="#334155" stroke-width="1.2" />
+        <text x="${x}" y="${pad.top + chartH + 18}" text-anchor="end" font-size="11" font-weight="700" fill="#0f172a" transform="rotate(-90 ${x} ${pad.top + chartH + 18})">${escapeHtml(tickLabel)}</text>
       `;
     }).join('');
   const legend = enrichedSeries.map(series => `
     <span class="pill"><span class="swatch" style="background:${series.color}"></span>${escapeHtml(series.label)}${series.filters ? `: ${escapeHtml(getFiltersSummary(series.filters))}` : ''}</span>
   `).join('');
   const seriesMarkup = enrichedSeries.map(series => {
-    const polyline = series.points.map(p => `${xFor(p.time)},${yFor(p.contribution)}`).join(' ');
-    const circles = series.points.map(p => {
-      const x = xFor(p.time);
+    const polyline = series.points.map((p, idx) => `${xForPoint(p, idx, series.points.length)},${yFor(p.contribution)}`).join(' ');
+    const circles = series.points.map((p, idx) => {
+      const x = xForPoint(p, idx, series.points.length);
       const y = yFor(p.contribution);
       return `
         <circle cx="${x}" cy="${y}" r="4" fill="${series.color}">
@@ -667,20 +712,23 @@ function renderGraph(seriesList){
     monthly_avg: 'Monthly Avg',
     monthly_total: 'Monthly Total'
   };
-  graphMetaEl.innerHTML = `X-axis: Date | Y-axis: Contribution | Mode: ${modeLabelMap[graphMode] || 'Raw Records'} | Source Records: ${totalPoints}<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${legend}</div>`;
+  const xAxisLabel = overlayTimeline ? 'Period Progression (overlapped compare)' : 'Date';
+  graphMetaEl.innerHTML = `X-axis: ${xAxisLabel} | Y-axis: Contribution | Mode: ${modeLabelMap[graphMode] || 'Raw Records'} | Source Records: ${totalPoints}<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${legend}</div>`;
   graphContainerEl.className = '';
-  graphContainerEl.innerHTML = `
+  lastGraphMeta = graphMetaEl.innerHTML;
+  lastGraphMarkup = `
     <svg class="graph-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Contribution graph">
       <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>
       ${gridLines}
-      <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartH}" stroke="#94a3b8" stroke-width="1.2" />
-      <line x1="${pad.left}" y1="${pad.top + chartH}" x2="${width - pad.right}" y2="${pad.top + chartH}" stroke="#94a3b8" stroke-width="1.2" />
+      <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartH}" stroke="#0f172a" stroke-width="1.8" />
+      <line x1="${pad.left}" y1="${pad.top + chartH}" x2="${width - pad.right}" y2="${pad.top + chartH}" stroke="#0f172a" stroke-width="1.8" />
       ${xTicks}
       ${seriesMarkup}
-      <text x="${width / 2}" y="${height - 2}" text-anchor="middle" font-size="12" fill="#475569">Date</text>
-      <text x="18" y="${height / 2}" text-anchor="middle" font-size="12" fill="#475569" transform="rotate(-90 18 ${height / 2})">Contribution</text>
+      <text x="${width / 2}" y="${height - 2}" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">${xAxisLabel}</text>
+      <text x="18" y="${height / 2}" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a" transform="rotate(-90 18 ${height / 2})">Contribution</text>
     </svg>
   `;
+  graphContainerEl.innerHTML = lastGraphMarkup;
 }
 
 function buildGraphSeries(){
@@ -901,6 +949,28 @@ graphModeEl.addEventListener('change', () => {
   } else {
     clearGraph();
   }
+});
+
+function openGraphModal(){
+  graphModalMetaEl.innerHTML = lastGraphMeta;
+  graphModalContainerEl.className = lastGraphMarkup ? 'modal-graph' : 'graph-empty modal-graph';
+  graphModalContainerEl.innerHTML = lastGraphMarkup || 'No graph loaded.';
+  graphModalEl.classList.add('open');
+  graphModalEl.setAttribute('aria-hidden', 'false');
+}
+
+function closeGraphModal(){
+  graphModalEl.classList.remove('open');
+  graphModalEl.setAttribute('aria-hidden', 'true');
+}
+
+q('expandGraph').addEventListener('click', openGraphModal);
+graphContainerEl.addEventListener('click', () => {
+  if (lastGraphMarkup) openGraphModal();
+});
+q('closeGraphModal').addEventListener('click', closeGraphModal);
+graphModalEl.addEventListener('click', (e) => {
+  if (e.target === graphModalEl) closeGraphModal();
 });
 
 boot();
